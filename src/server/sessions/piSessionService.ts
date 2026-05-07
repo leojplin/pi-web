@@ -103,10 +103,11 @@ export class PiSessionService {
     return commands.sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  async prompt(sessionId: string, text: string): Promise<void> {
+  async prompt(sessionId: string, text: string, streamingBehavior?: "steer" | "followUp"): Promise<void> {
     const session = await this.getOrOpen(sessionId);
-    this.publishActivity(session, "prompt accepted", "active");
-    void session.prompt(text).catch((error: unknown) => {
+    const behavior = session.isStreaming ? streamingBehavior ?? "followUp" : undefined;
+    this.publishActivity(session, behavior === "steer" ? "steering queued" : behavior === "followUp" ? "message queued" : "prompt accepted", "active");
+    void session.prompt(text, behavior === undefined ? undefined : { streamingBehavior: behavior }).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       this.publishActivity(session, "error", "error", message);
       this.events.publish(sessionId, { type: "session.error", message });

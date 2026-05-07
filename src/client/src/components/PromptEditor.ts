@@ -10,7 +10,8 @@ export class PromptEditor extends LitElement {
   @property({ type: Boolean }) disabled = false;
   @property() sessionId?: string;
   @property() cwd?: string;
-  @property({ attribute: false }) onSend?: (text: string) => void;
+  @property({ type: Boolean }) canSteer = false;
+  @property({ attribute: false }) onSend?: (text: string, streamingBehavior?: "steer" | "followUp") => void;
   @property({ attribute: false }) onStopSession?: () => void;
   @query("textarea") private textarea?: HTMLTextAreaElement;
   @state() private draft = "";
@@ -49,7 +50,8 @@ export class PromptEditor extends LitElement {
           ${shellMode ? html`<div class="mode-hint">Shell command${inputMode.excludeFromContext ? " · excluded from context" : ""}</div>` : null}
           <autocomplete-menu .items=${this.completions} .selectedIndex=${this.selectedIndex} .onPick=${(item: CompletionItem) => { this.pick(item); }}></autocomplete-menu>
         </div>
-        <button ?disabled=${this.disabled} @click=${() => { this.send(); }}>Send</button>
+        <button ?disabled=${this.disabled} title=${this.canSteer ? "Queue after the current response" : "Send message"} @click=${() => { this.send("followUp"); }}>${this.canSteer ? "Queue" : "Send"}</button>
+        ${this.canSteer ? html`<button ?disabled=${this.disabled} title="Steer the current response before the next model call" @click=${() => { this.send("steer"); }}>Steer</button>` : null}
         <button ?disabled=${this.disabled} title="Stop only this Pi session from continuing" @click=${() => this.onStopSession?.()}>Stop session</button>
       </footer>
     `;
@@ -140,7 +142,7 @@ export class PromptEditor extends LitElement {
     }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      this.send();
+      this.send(this.canSteer ? "followUp" : undefined);
     }
   }
 
@@ -150,13 +152,13 @@ export class PromptEditor extends LitElement {
     this.completions = [];
   }
 
-  private send() {
+  private send(streamingBehavior?: "steer" | "followUp") {
     const text = this.draft.trim();
     if (text === "" || this.disabled) return;
     this.draft = "";
     if (this.sessionId !== undefined && this.sessionId !== "") clearDraft(this.sessionId);
     this.completions = [];
-    this.onSend?.(text);
+    this.onSend?.(text, this.canSteer ? streamingBehavior : undefined);
   }
 
   static override styles = promptEditorStyles;

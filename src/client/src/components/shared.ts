@@ -104,7 +104,7 @@ export const formattedTextStyles = css`
 
 export const statusBarStyles = css`
   :host { display: block; color: #8b949e; font: 12px system-ui, sans-serif; }
-  .bar { display: flex; gap: 12px; align-items: center; min-width: 0; padding: 7px 12px; border-bottom: 1px solid #30363d; background: #0d1117; white-space: nowrap; overflow: hidden; }
+  .bar { display: flex; gap: 12px; align-items: center; min-width: 0; padding: 7px 12px; border-top: 1px solid #30363d; background: #0d1117; white-space: nowrap; overflow: hidden; }
   span { overflow: hidden; text-overflow: ellipsis; }
   .bar > span:first-child { flex: 1 1 auto; min-width: 80px; }
   .activity { display: inline-flex; align-items: center; gap: 6px; color: #8b949e; }

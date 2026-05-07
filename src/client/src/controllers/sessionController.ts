@@ -81,7 +81,7 @@ export class SessionController {
     }
   }
 
-  async send(text: string) {
+  async send(text: string, streamingBehavior?: "steer" | "followUp") {
     const trimmed = text.trim();
     if (trimmed.startsWith("/")) return this.runCommand(text);
     if (isShellInput(text)) return this.runShell(text);
@@ -89,7 +89,7 @@ export class SessionController {
     if (!session) return;
     this.setState({ messages: [...this.getState().messages, textMessage("user", text)] });
     try {
-      await api.prompt(session.id, text);
+      await api.prompt(session.id, text, streamingBehavior);
     } catch (error) {
       this.setState({ error: String(error) });
     }

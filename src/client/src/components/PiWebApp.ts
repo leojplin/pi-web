@@ -114,9 +114,9 @@ export class PiWebApp extends LitElement {
         <main>
           ${state.error ? html`<div class="error">${state.error}</div>` : null}
           ${state.selectedSession ? html`
-            <status-bar .status=${state.status} .activity=${state.activity} .workspace=${state.selectedWorkspace}></status-bar>
             <chat-view .sessionId=${state.selectedSession.id} .messages=${state.messages} .messageStart=${state.messagePageStart} .messageTotal=${state.messagePageTotal} .hasMore=${state.messagePageStart > 0} .loadingMore=${state.isLoadingEarlierMessages} .onLoadMore=${() => this.withChatPrependTransition(() => this.sessions.loadEarlierMessages())}></chat-view>
-            <prompt-editor .sessionId=${state.selectedSession.id} .cwd=${state.selectedWorkspace?.path} .onSend=${(text: string) => this.sessions.send(text)} .onStopSession=${() => this.sessions.stopSession()}></prompt-editor>
+            <prompt-editor .sessionId=${state.selectedSession.id} .cwd=${state.selectedWorkspace?.path} .canSteer=${state.status?.isStreaming === true} .onSend=${(text: string, streamingBehavior?: "steer" | "followUp") => this.sessions.send(text, streamingBehavior)} .onStopSession=${() => this.sessions.stopSession()}></prompt-editor>
+            <status-bar .status=${state.status} .activity=${state.activity} .workspace=${state.selectedWorkspace}></status-bar>
             ${state.commandDialog !== undefined ? html`<command-picker .title=${state.commandDialog.title} .options=${state.commandDialog.options} .onPick=${(value: string) => this.sessions.respondToCommand(state.commandDialog?.requestId ?? "", value)} .onCancel=${() => { this.sessions.cancelCommand(); }}></command-picker>` : null}
           ` : html`<div class="empty">Select or start a session.</div>`}
         </main>

@@ -41,9 +41,9 @@ export function registerSessionRoutes(app: FastifyInstance, sessions: PiSessionS
     }
   });
 
-  app.post<{ Params: { sessionId: string }; Body: { text: string } }>(`${prefix}/sessions/:sessionId/prompt`, async (request, reply) => {
+  app.post<{ Params: { sessionId: string }; Body: { text: string; streamingBehavior?: "steer" | "followUp" } }>(`${prefix}/sessions/:sessionId/prompt`, async (request, reply) => {
     try {
-      await sessions.prompt(request.params.sessionId, request.body.text);
+      await sessions.prompt(request.params.sessionId, request.body.text, request.body.streamingBehavior);
       return { accepted: true };
     } catch (error) {
       return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
