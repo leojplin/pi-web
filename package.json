@@ -11,8 +11,9 @@
     "dev:client": "vite --host 0.0.0.0",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint \"src/**/*.ts\" vite.config.ts",
-    "verify": "npm run typecheck && npm run lint",
+    "lint": "eslint \"src/**/*.ts\" vite.config.ts vitest.config.ts",
+    "test": "vitest run --config vitest.config.ts",
+    "verify": "npm run typecheck && npm run lint && npm test",
     "start": "tsx src/server/index.ts",
     "start:sessiond": "tsx src/server/sessiond.ts"
   },
@@ -43,6 +44,7 @@
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.59.2",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "vitest": "^4.1.5"
   }
 }
