@@ -355,10 +355,12 @@ function toClientEvent(event: unknown): unknown {
     return { type: "assistant.delta", text: getString(assistantMessageEvent, "delta") ?? "" };
   }
   if (eventType === "tool_execution_start") {
-    return { type: "tool.start", toolName: getString(event, "toolName") ?? "", toolCallId: getString(event, "toolCallId") ?? "", summary: summarizeToolArgs(getProperty(event, "args")) };
+    const args = getProperty(event, "args");
+    return { type: "tool.start", toolName: getString(event, "toolName") ?? "", toolCallId: getString(event, "toolCallId") ?? "", summary: summarizeToolArgs(args), args };
   }
   if (eventType === "tool_execution_end") {
-    return { type: "tool.end", toolName: getString(event, "toolName") ?? "", toolCallId: getString(event, "toolCallId") ?? "", text: stringifyToolResult(getProperty(event, "result")), isError: getBoolean(event, "isError") === true };
+    const result = getProperty(event, "result");
+    return { type: "tool.end", toolName: getString(event, "toolName") ?? "", toolCallId: getString(event, "toolCallId") ?? "", text: stringifyToolResult(result), content: toolResultContent(result), isError: getBoolean(event, "isError") === true };
   }
   if (eventType === "agent_start") return { type: "agent.start" };
   if (eventType === "agent_end") return { type: "agent.end" };
@@ -387,12 +389,26 @@ function shortToolValue(value: unknown): string {
   return "";
 }
 
+function toolResultContent(result: unknown): unknown {
+  if (isRecord(result)) {
+    const content = getProperty(result, "content");
+    if (content !== undefined) return content;
+    const text = getString(result, "text") ?? getString(result, "output");
+    if (text !== undefined) return [{ type: "text", text }];
+  }
+  if (typeof result === "string") return [{ type: "text", text: result }];
+  return result;
+}
+
 function stringifyToolResult(result: unknown): string {
   if (typeof result === "string") return result;
   if (Array.isArray(result)) return result.map(stringifyToolResult).filter((text) => text !== "").join("\n");
   if (isRecord(result)) {
+    if (getString(result, "type") === "image") return "[image]";
     const text = getString(result, "text") ?? getString(result, "content") ?? getString(result, "output");
     if (text !== undefined) return text;
+    const content = getProperty(result, "content");
+    if (Array.isArray(content)) return stringifyToolResult(content);
     return JSON.stringify(result, null, 2);
   }
   return stringifyPrimitive(result);

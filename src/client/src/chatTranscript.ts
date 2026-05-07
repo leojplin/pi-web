@@ -1,12 +1,12 @@
-import { appendText, textMessage } from "./chatMessages";
-import type { ChatLine, ChatPart } from "./components/shared";
+import { appendText, normalizeMessage, textMessage } from "./chatMessages";
+import type { ChatLine } from "./components/shared";
 import { appendShellChunk, finalizeShellMessage, shellStartMessage } from "./shellMessages";
 import type { SessionUiEvent } from "./sessionSocket";
 
 export function applyTranscriptEvent(messages: ChatLine[], event: SessionUiEvent): ChatLine[] | undefined {
   if (event.type === "assistant.delta") return appendText(messages, "assistant", event.text);
-  if (event.type === "tool.start") return appendPart(messages, "assistant", { type: "toolCall", toolName: event.toolName, summary: event.summary });
-  if (event.type === "tool.end") return [...messages, { role: "tool", parts: [{ type: "toolResult", toolName: event.toolName, text: event.text, isError: event.isError }] }];
+  if (event.type === "tool.start") return appendNormalized(messages, { role: "assistant", content: [{ type: "toolCall", name: event.toolName, arguments: event.args }] });
+  if (event.type === "tool.end") return appendNormalized(messages, { role: "toolResult", toolName: event.toolName, content: event.content ?? [{ type: "text", text: event.text }], isError: event.isError });
   if (event.type === "shell.start") return [...messages, shellStartMessage(event.command, event.excludeFromContext)];
   if (event.type === "shell.chunk") return appendShellChunk(messages, event.chunk);
   if (event.type === "shell.end") return finalizeShellMessage(messages, event);
@@ -15,8 +15,12 @@ export function applyTranscriptEvent(messages: ChatLine[], event: SessionUiEvent
   return undefined;
 }
 
-function appendPart(messages: ChatLine[], role: ChatLine["role"], part: ChatPart): ChatLine[] {
+function appendNormalized(messages: ChatLine[], rawMessage: unknown): ChatLine[] {
+  return normalizeMessage(rawMessage).reduce(appendLine, messages);
+}
+
+function appendLine(messages: ChatLine[], line: ChatLine): ChatLine[] {
   const last = messages.at(-1);
-  if (last?.role === role) return [...messages.slice(0, -1), { ...last, parts: [...last.parts, part] }];
-  return [...messages, { role, parts: [part] }];
+  if (last?.role === line.role) return [...messages.slice(0, -1), { ...last, parts: [...last.parts, ...line.parts] }];
+  return [...messages, line];
 }

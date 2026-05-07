@@ -2,8 +2,8 @@ import { globalSessionEvents, sessionEvents, type SessionActivity, type SessionS
 
 export type SessionUiEvent =
   | { type: "assistant.delta"; text: string }
-  | { type: "tool.start"; toolName: string; summary: string }
-  | { type: "tool.end"; toolName: string; text: string; isError: boolean }
+  | { type: "tool.start"; toolName: string; summary: string; args?: unknown }
+  | { type: "tool.end"; toolName: string; text: string; isError: boolean; content?: unknown }
   | { type: "shell.start"; command: string; excludeFromContext?: boolean }
   | { type: "shell.chunk"; chunk: string }
   | { type: "shell.end"; output?: string; exitCode?: number | null; cancelled?: boolean; truncated?: boolean; fullOutputPath?: string; isError?: boolean }

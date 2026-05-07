@@ -20,7 +20,7 @@ export function appendText(messages: ChatLine[], role: ChatLine["role"], text: s
   return [...messages, textMessage(role, text)];
 }
 
-function normalizeMessage(message: unknown): ChatLine[] {
+export function normalizeMessage(message: unknown): ChatLine[] {
   if (getString(message, "role") === "bashExecution") return [normalizeBashExecution(message)];
   const role = normalizeRole(getString(message, "role"));
   const parts = normalizeContent(getProperty(message, "content"), message);

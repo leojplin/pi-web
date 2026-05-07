@@ -97,7 +97,7 @@ export class PromptEditor extends LitElement {
         .map((command) => ({
           kind: "command",
           replaceFrom: trigger.from,
-          replaceTo: this.draft.length,
+          replaceTo: trigger.to,
           insertText: `/${command.name}`,
           detail: command.source,
           ...(command.description === undefined ? {} : { description: command.description }),
@@ -107,18 +107,19 @@ export class PromptEditor extends LitElement {
       if (version !== this.requestVersion) return;
       this.completions = files
         .slice(0, 12)
-        .map((file) => ({ kind: "file", replaceFrom: trigger.from, replaceTo: this.draft.length, insertText: `@${file.path}`, detail: file.kind }));
+        .map((file) => ({ kind: "file", replaceFrom: trigger.from, replaceTo: trigger.to, insertText: `@${file.path}`, detail: file.kind }));
     }
   }
 
-  private currentTrigger(): { kind: "command" | "file"; query: string; from: number; fileKind?: FileSuggestion["kind"] } | undefined {
-    const beforeCursor = this.draft;
-    if (beforeCursor.endsWith("@ ")) return { kind: "file", query: "", from: beforeCursor.length - 2, fileKind: "untracked" };
+  private currentTrigger(): { kind: "command" | "file"; query: string; from: number; to: number; fileKind?: FileSuggestion["kind"] } | undefined {
+    const cursor = this.textarea?.selectionStart ?? this.draft.length;
+    const beforeCursor = this.draft.slice(0, cursor);
+    if (beforeCursor.endsWith("@ ")) return { kind: "file", query: "", from: beforeCursor.length - 2, to: cursor, fileKind: "untracked" };
 
     const tokenStart = Math.max(beforeCursor.lastIndexOf(" "), beforeCursor.lastIndexOf("\n")) + 1;
     const token = beforeCursor.slice(tokenStart);
-    if (token.startsWith("/")) return { kind: "command", query: token.slice(1), from: tokenStart };
-    if (token.startsWith("@")) return { kind: "file", query: token.slice(1), from: tokenStart };
+    if (token.startsWith("/") && tokenStart === 0) return { kind: "command", query: token.slice(1), from: tokenStart, to: cursor };
+    if (token.startsWith("@")) return { kind: "file", query: token.slice(1), from: tokenStart, to: cursor };
     return undefined;
   }
 
