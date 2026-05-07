@@ -1,7 +1,8 @@
 import { api, type CommandResult, type SessionActivity, type SessionInfo, type SessionStatus } from "../api";
 import { appendText, normalizeMessages, textMessage } from "../chatMessages";
-import { GlobalSessionSocket, SessionSocket, type SessionUiEvent } from "../sessionSocket";
 import type { ChatLine, ChatPart } from "../components/shared";
+import { isShellInput, appendShellChunk, finalizeShellMessage, shellStartMessage } from "../shellMessages";
+import { GlobalSessionSocket, SessionSocket, type SessionUiEvent } from "../sessionSocket";
 import type { GetState, SetState, UpdateUrl } from "./types";
 
 export class SessionController {
@@ -58,7 +59,7 @@ export class SessionController {
   async send(text: string) {
     const trimmed = text.trim();
     if (trimmed.startsWith("/")) return this.runCommand(text);
-    if (trimmed.startsWith("!")) return this.runShell(text);
+    if (isShellInput(text)) return this.runShell(text);
     const session = this.getState().selectedSession;
     if (!session) return;
     this.setState({ messages: [...this.getState().messages, textMessage("user", text)] });
@@ -157,7 +158,7 @@ export class SessionController {
     } else if (event.type === "tool.end") {
       this.setState({ messages: [...messages, { role: "tool", parts: [{ type: "toolResult", toolName: event.toolName, text: event.text, isError: event.isError }] }] });
     } else if (event.type === "shell.start") {
-      this.setState({ messages: [...messages, textMessage("bash", `$ ${event.command}${event.excludeFromContext ? "\n\nexcluded from context" : ""}`)] });
+      this.setState({ messages: [...messages, shellStartMessage(event.command, event.excludeFromContext)] });
     } else if (event.type === "shell.chunk") {
       this.setState({ messages: appendShellChunk(messages, event.chunk) });
     } else if (event.type === "shell.end") {
@@ -180,25 +181,3 @@ function appendPart(messages: ChatLine[], role: ChatLine["role"], part: ChatPart
   return [...messages, { role, parts: [part] }];
 }
 
-function appendShellChunk(messages: ChatLine[], chunk: string): ChatLine[] {
-  const last = messages.at(-1);
-  const lastPart = last?.parts.at(-1);
-  if (last?.role !== "bash" || lastPart?.type !== "text") return [...messages, textMessage("bash", chunk)];
-  const separator = lastPart.text.includes("\n\n") ? "" : "\n\n";
-  return [...messages.slice(0, -1), { ...last, parts: [...last.parts.slice(0, -1), { ...lastPart, text: lastPart.text + separator + chunk }] }];
-}
-
-function finalizeShellMessage(messages: ChatLine[], event: Extract<SessionUiEvent, { type: "shell.end" }>): ChatLine[] {
-  const last = messages.at(-1);
-  const lastPart = last?.parts.at(-1);
-  if (last?.role !== "bash" || lastPart?.type !== "text") return messages;
-  const notes: string[] = [];
-  if (!lastPart.text.includes("\n\n") && !event.output) notes.push("(no output)");
-  if (event.isError) notes.push(event.output ?? "Bash command failed");
-  if (event.exitCode != null) notes.push(`exit ${event.exitCode}`);
-  if (event.cancelled) notes.push("cancelled");
-  if (event.truncated) notes.push("output truncated");
-  if (event.fullOutputPath) notes.push(`full output: ${event.fullOutputPath}`);
-  if (!notes.length) return messages;
-  return [...messages.slice(0, -1), { ...last, parts: [...last.parts.slice(0, -1), { ...lastPart, text: `${lastPart.text}\n\n${notes.join("\n")}` }] }];
-}
