@@ -197,7 +197,7 @@ Usage:
   pi-web doctor
 
 Recommended install:
-  npm install -g pi-web
+  npm install -g @jmfederico/pi-web
   pi-web install
 `);
 }

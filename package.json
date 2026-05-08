@@ -1,5 +1,5 @@
 {
-  "name": "pi-web",
+  "name": "@jmfederico/pi-web",
   "version": "1.202605.1",
   "license": "MIT",
   "type": "module",
@@ -28,7 +28,7 @@
     "start": "tsx src/server/index.ts",
     "start:sessiond": "tsx src/server/sessiond.ts",
     "clean": "rm -rf dist",
-    "prepack": "npm run build",
+    "prepare": "npm run build",
     "pack:dry": "npm pack --dry-run",
     "prepublishOnly": "npm run verify",
     "publish:npm": "npm publish --access public"

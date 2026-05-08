@@ -90,7 +90,7 @@ Pi Web keeps its own state intentionally small:
 Recommended install uses npm plus systemd user services:
 
 ```bash
-npm install -g pi-web
+npm install -g @jmfederico/pi-web
 pi-web install
 ```
 
@@ -116,7 +116,7 @@ pi-web uninstall
 One-line install is also available for users who prefer it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/earendil-works/pi-web/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/jmfederico/pi-web/main/install.sh | sh
 ```
 
 Advanced users may run the binaries however they prefer:
@@ -125,6 +125,15 @@ Advanced users may run the binaries however they prefer:
 pi-web-sessiond
 PI_WEB_PORT=8504 pi-web-server
 ```
+
+To install directly from the GitHub repository instead of npm:
+
+```bash
+npm install -g github:jmfederico/pi-web#main
+pi-web install
+```
+
+This uses npm's git install flow and runs the package `prepare` script to build `dist/` on the target machine.
 
 ## Development quick start
 
@@ -161,7 +170,7 @@ npm run pack:dry
 npm publish --access public
 ```
 
-`prepack` builds `dist/` before npm creates the tarball, and `prepublishOnly` runs verification before publishing. Releases can also be published by the GitHub Actions npm workflow when a GitHub release is published.
+`prepare` builds `dist/` before npm creates the tarball and when installing directly from git, and `prepublishOnly` runs verification before publishing. Releases can also be published by the GitHub Actions npm workflow when a GitHub release is published.
 
 Pi Web uses a single-line CalVer-inspired npm version: `MAJOR.YYYYMM.SEQUENCE`, for example `1.202605.1`. The major number signals breaking-change eras; the middle number is the release month; the final number increments for additional releases in that month. Older major eras may be deprecated rather than maintained in parallel.
 
