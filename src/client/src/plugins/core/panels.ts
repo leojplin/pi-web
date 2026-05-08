@@ -1,8 +1,6 @@
 import { html, type TemplateResult } from "lit";
 import type { FileTreeEntry, GitDiffResponse, GitStatusResponse } from "../../api";
 import type { WorkspacePanelContribution, WorkspacePanelContext } from "../types";
-import "../../components/CodeViewer";
-import "../../components/TerminalPanel";
 
 export function createCoreWorkspacePanels(): WorkspacePanelContribution[] {
   return [
@@ -68,6 +66,7 @@ function renderFileViewer(context: WorkspacePanelContext): TemplateResult {
   if (context.selectedFilePath === undefined || context.selectedFilePath === "") return html`<p class="muted">Select a file.</p>`;
   if (file === undefined) return html`<p class="muted">Loading ${context.selectedFilePath}…</p>`;
   if (file.binary) return html`<p class="muted">Binary file: ${file.path}</p>`;
+  loadCodeViewer();
   return html`
     <div class="viewer-header"><strong>${file.path}</strong><small>${file.language ?? "text"}${file.truncated ? " · truncated" : ""}</small></div>
     <code-viewer .content=${file.content} .language=${file.language}></code-viewer>
@@ -75,6 +74,7 @@ function renderFileViewer(context: WorkspacePanelContext): TemplateResult {
 }
 
 function renderTerminal(context: WorkspacePanelContext): TemplateResult {
+  loadTerminalPanel();
   return html`<terminal-panel .workspace=${context.workspace}></terminal-panel>`;
 }
 
@@ -120,12 +120,21 @@ function renderDiffViewer(context: WorkspacePanelContext): TemplateResult {
 }
 
 function renderDiffSection(diff: GitDiffResponse): TemplateResult {
+  loadCodeViewer();
   return html`
     <section class="diff-section">
       <div class="viewer-header"><strong>${diff.path ?? "diff"}</strong><small>${diff.staged ? "staged" : "unstaged"}${diff.truncated ? " · truncated" : ""}</small></div>
       <code-viewer .content=${diff.diff} .language=${"diff"}></code-viewer>
     </section>
   `;
+}
+
+function loadCodeViewer(): void {
+  void import("../../components/CodeViewer");
+}
+
+function loadTerminalPanel(): void {
+  void import("../../components/TerminalPanel");
 }
 
 function gitSummary(status: GitStatusResponse): string {
