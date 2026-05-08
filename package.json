@@ -1,7 +1,7 @@
 {
   "name": "pi-web-poc",
   "version": "0.0.1",
-  "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "bash -c 'trap \"kill 0\" EXIT; npm run dev:sessiond & npm run dev:web & npm run dev:client & wait'",

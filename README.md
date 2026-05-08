@@ -208,3 +208,7 @@ Pi Web is the beginning of an agent-first development environment:
 - the UI grows around the needs of agentic development rather than the habits of local IDEs.
 
 The goal is simple: make it practical to run more development remotely, in parallel, with agents as first-class participants and humans focused on direction, judgment, and review.
+
+## License
+
+MIT © 2026 Federico Jaramillo Martinez. See [LICENSE](LICENSE).
