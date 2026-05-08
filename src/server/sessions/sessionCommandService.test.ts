@@ -1,0 +1,111 @@
+/* eslint-disable @typescript-eslint/consistent-type-assertions */
+import { describe, expect, it, vi } from "vitest";
+import { SessionCommandService } from "./sessionCommandService.js";
+
+function activeSession(overrides: Record<string, unknown> = {}) {
+  const session = {
+    sessionId: "s1",
+    sessionFile: "/tmp/s1.jsonl",
+    sessionName: undefined as string | undefined,
+    messages: [{}, {}],
+    promptTemplates: [{ name: "template" }],
+    extensionRunner: { getRegisteredCommands: () => [{ invocationName: "ext" }] },
+    resourceLoader: { getSkills: () => ({ skills: [{ name: "skill-a" }] }) },
+    sessionManager: { getLeafId: () => "leaf-1" },
+    setSessionName: vi.fn((name: string) => { session.sessionName = name; }),
+    compact: vi.fn(async () => {
+      await Promise.resolve();
+      return { summary: "short summary", tokensBefore: 123 };
+    }),
+    getSessionStats: vi.fn(() => ({
+      sessionId: "s1",
+      totalMessages: 2,
+      userMessages: 1,
+      assistantMessages: 1,
+      toolCalls: 3,
+      tokens: { input: 10, output: 5, total: 15 },
+      cost: 0.12345,
+    })),
+    getUserMessagesForForking: vi.fn(() => [{ entryId: "m1", text: "hello ".repeat(40) }]),
+    ...overrides,
+  };
+  const runtime = { cwd: "/work", session, fork: vi.fn(async () => {
+    await Promise.resolve();
+    return { cancelled: false };
+  }) };
+  return { runtime };
+}
+
+async function getActive(active: ReturnType<typeof activeSession>): Promise<never> {
+  await Promise.resolve();
+  return active as never;
+}
+
+async function promptAccepted(): Promise<void> {
+  await Promise.resolve();
+}
+
+describe("SessionCommandService", () => {
+  it("rejects unknown commands and forwards runtime commands as prompts", async () => {
+    const active = activeSession();
+    const prompt = vi.fn(promptAccepted);
+    const service = new SessionCommandService(() => getActive(active), prompt, { publish: vi.fn() } as never);
+
+    await expect(service.run("s1", "/missing")).resolves.toEqual({ type: "unsupported", message: "Unknown command: /missing" });
+    await expect(service.run("s1", "/ext arg")).resolves.toEqual({ type: "done", message: "Accepted /ext arg" });
+    await expect(service.run("s1", "/template arg")).resolves.toMatchObject({ type: "done" });
+    await expect(service.run("s1", "/skill:skill-a arg")).resolves.toMatchObject({ type: "done" });
+    expect(prompt).toHaveBeenCalledTimes(3);
+  });
+
+  it("renames sessions and returns updated client session metadata", async () => {
+    const active = activeSession();
+    const service = new SessionCommandService(() => getActive(active), vi.fn(), { publish: vi.fn() } as never);
+
+    await expect(service.run("s1", "/name Useful name")).resolves.toMatchObject({
+      type: "done",
+      message: "Session named: Useful name",
+      session: { id: "s1", cwd: "/work", name: "Useful name", messageCount: 2 },
+    });
+    expect(active.runtime.session.setSessionName).toHaveBeenCalledWith("Useful name");
+  });
+
+  it("formats session stats", async () => {
+    const active = activeSession();
+    const service = new SessionCommandService(() => getActive(active), vi.fn(), { publish: vi.fn() } as never);
+
+    await expect(service.run("s1", "/session")).resolves.toEqual({
+      type: "done",
+      message: "Session: s1\nMessages: 2 (1 user, 1 assistant)\nTool calls: 3\nTokens: ↑10 ↓5 total 15\nCost: $0.1235",
+    });
+  });
+
+  it("starts compaction and publishes completion", async () => {
+    const active = activeSession();
+    const events = { publish: vi.fn() };
+    const service = new SessionCommandService(() => getActive(active), vi.fn(), events as never);
+
+    await expect(service.run("s1", "/compact focus on tests")).resolves.toEqual({ type: "done", message: "Compaction started…" });
+    await vi.waitFor(() => {
+      expect(events.publish).toHaveBeenCalledWith("s1", {
+        type: "command.output",
+        level: "success",
+        message: "Compaction complete.\nTokens before: 123\n\nshort summary",
+      });
+    });
+    expect(active.runtime.session.compact).toHaveBeenCalledWith("focus on tests");
+  });
+
+  it("creates fork selection requests and responds with selected entry", async () => {
+    const active = activeSession();
+    const service = new SessionCommandService(() => getActive(active), vi.fn(), { publish: vi.fn() } as never);
+
+    const result = await service.run("s1", "/fork");
+
+    expect(result).toMatchObject({ type: "select", title: "Fork from message", options: [{ value: "m1" }] });
+    if (result.type !== "select") throw new Error("Expected select result");
+    await expect(service.respond("s1", result.requestId, "m1")).resolves.toMatchObject({ type: "done", message: "Session forked", session: { id: "s1" } });
+    expect(active.runtime.fork).toHaveBeenCalledWith("m1");
+    await expect(service.respond("s1", result.requestId, "m1")).resolves.toEqual({ type: "unsupported", message: "Command request expired" });
+  });
+});
