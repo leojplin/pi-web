@@ -53,9 +53,15 @@ export class ActionPalette extends LitElement {
   }
 
   protected override updated(changed: PropertyValues) {
-    if (!changed.has("actions") && !changed.has("queryText")) return;
-    const maxIndex = Math.max(0, this.filteredActions().length - 1);
-    if (this.selectedIndex > maxIndex) this.selectedIndex = maxIndex;
+    if (changed.has("actions") || changed.has("queryText")) {
+      const maxIndex = Math.max(0, this.filteredActions().length - 1);
+      if (this.selectedIndex > maxIndex) this.selectedIndex = maxIndex;
+    }
+    if (changed.has("selectedIndex") || changed.has("actions") || changed.has("queryText")) this.scrollSelectedIntoView();
+  }
+
+  private scrollSelectedIntoView() {
+    this.renderRoot.querySelector<HTMLElement>(".options button.selected")?.scrollIntoView({ block: "nearest" });
   }
 
   private filteredActions(): AppAction[] {

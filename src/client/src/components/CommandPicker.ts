@@ -1,4 +1,4 @@
-import { LitElement, html } from "lit";
+import { LitElement, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { CommandOption } from "../api";
 import { commandPickerStyles } from "./shared";
@@ -36,16 +36,24 @@ export class CommandPicker extends LitElement {
     this.renderRoot.querySelector<HTMLElement>(".options")?.focus();
   }
 
+  protected override updated(changed: PropertyValues) {
+    if (changed.has("selectedIndex") || changed.has("options")) this.scrollSelectedIntoView();
+  }
+
+  private scrollSelectedIntoView() {
+    this.renderRoot.querySelector<HTMLElement>(".options button.selected")?.scrollIntoView({ block: "nearest" });
+  }
+
   private handleKeyDown(event: KeyboardEvent) {
     if (event.key === "Escape") {
       event.preventDefault();
       this.onCancel?.();
     } else if (event.key === "ArrowDown") {
       event.preventDefault();
-      this.selectedIndex = (this.selectedIndex + 1) % this.options.length;
+      if (this.options.length > 0) this.selectedIndex = (this.selectedIndex + 1) % this.options.length;
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      this.selectedIndex = (this.selectedIndex - 1 + this.options.length) % this.options.length;
+      if (this.options.length > 0) this.selectedIndex = (this.selectedIndex - 1 + this.options.length) % this.options.length;
     } else if (event.key === "Enter") {
       event.preventDefault();
       const option = this.options[this.selectedIndex];

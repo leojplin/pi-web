@@ -1,4 +1,4 @@
-import { LitElement, html } from "lit";
+import { LitElement, html, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { autocompleteStyles, type CompletionItem } from "./shared";
 
@@ -21,6 +21,14 @@ export class AutocompleteMenu extends LitElement {
         `)}
       </div>
     `;
+  }
+
+  protected override updated(changed: PropertyValues) {
+    if (changed.has("selectedIndex") || changed.has("items")) this.scrollSelectedIntoView();
+  }
+
+  private scrollSelectedIntoView() {
+    this.renderRoot.querySelector<HTMLElement>("button.selected")?.scrollIntoView({ block: "nearest" });
   }
 
   static override styles = autocompleteStyles;
