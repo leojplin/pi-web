@@ -1,4 +1,4 @@
-import type { CommandOption, CommandResult, FileContentResponse, FileSuggestion, FileTreeEntry, FileTreeResponse, GitDiffResponse, GitFileState, GitStatusFile, GitStatusResponse, MessagePage, Project, QueuedSessionMessage, SessionInfo, SessionStatus, SlashCommand, TerminalInfo, Workspace } from "../../../shared/apiTypes";
+import type { CommandOption, CommandResult, FileContentResponse, FileSuggestion, FileTreeEntry, FileTreeResponse, GitDiffResponse, GitFileState, GitStatusFile, GitStatusResponse, MessagePage, ModelSelectionResponse, Project, QueuedSessionMessage, SessionInfo, SessionModel, SessionStatus, SlashCommand, TerminalInfo, ThinkingLevel, ThinkingLevelsResponse, Workspace } from "../../../shared/apiTypes";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -127,10 +127,29 @@ function parseTokens(value: unknown): SessionStatus["tokens"] {
   };
 }
 
+function parseSessionModel(value: unknown): SessionModel {
+  const record = requireRecord(value);
+  return { ...optionalField("provider", optionalString(record, "provider")), ...optionalField("id", optionalString(record, "id")), ...optionalField("name", optionalString(record, "name")), ...optionalField("contextWindow", optionalNumber(record, "contextWindow")), ...optionalField("reasoning", record["reasoning"]) };
+}
+
 function optionalModel(value: unknown): Pick<SessionStatus, "model"> | object {
   if (value === undefined) return {};
+  return { model: parseSessionModel(value) };
+}
+
+export function parseModelSelectionResponse(value: unknown): ModelSelectionResponse {
   const record = requireRecord(value);
-  return { model: { ...optionalField("provider", optionalString(record, "provider")), ...optionalField("id", optionalString(record, "id")), ...optionalField("name", optionalString(record, "name")), ...optionalField("contextWindow", optionalNumber(record, "contextWindow")), ...optionalField("reasoning", record["reasoning"]) } };
+  return { models: arrayOf(parseSessionModel)(record["models"]) };
+}
+
+function parseThinkingLevel(value: unknown): ThinkingLevel {
+  if (value !== "off" && value !== "minimal" && value !== "low" && value !== "medium" && value !== "high" && value !== "xhigh") throw new Error("Invalid thinking level");
+  return value;
+}
+
+export function parseThinkingLevelsResponse(value: unknown): ThinkingLevelsResponse {
+  const record = requireRecord(value);
+  return { levels: arrayOf(parseThinkingLevel)(record["levels"]) };
 }
 
 function optionalContextUsage(value: unknown): Pick<SessionStatus, "contextUsage"> | object {

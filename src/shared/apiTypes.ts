@@ -43,9 +43,27 @@ export interface QueuedSessionMessage {
   text: string;
 }
 
+export interface SessionModel {
+  provider?: string;
+  id?: string;
+  name?: string;
+  contextWindow?: number;
+  reasoning?: unknown;
+}
+
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+
+export interface ModelSelectionResponse {
+  models: SessionModel[];
+}
+
+export interface ThinkingLevelsResponse {
+  levels: ThinkingLevel[];
+}
+
 export interface SessionStatus {
   sessionId: string;
-  model?: { provider?: string; id?: string; name?: string; contextWindow?: number; reasoning?: unknown };
+  model?: SessionModel;
   thinkingLevel?: string;
   isStreaming: boolean;
   isCompacting: boolean;

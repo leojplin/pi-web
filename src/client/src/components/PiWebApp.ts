@@ -1,6 +1,6 @@
 import { LitElement, html } from "lit";
 import { customElement, query, state } from "lit/decorators.js";
-import type { Project, SessionInfo, Workspace } from "../api";
+import type { Project, SessionInfo, ThinkingLevel, Workspace } from "../api";
 import type { AppAction } from "../actions";
 import { initialAppState, type AppState } from "../appState";
 import { FileExplorerController } from "../controllers/fileExplorerController";
@@ -246,6 +246,48 @@ export class PiWebApp extends LitElement {
     if (action !== undefined) void action.run();
   }
 
+  private async openModelDialog() {
+    const models = await this.sessions.listModels();
+    const currentProvider = this.state.status?.model?.provider;
+    const currentId = this.state.status?.model?.id;
+    this.setState({
+      modelDialog: {
+        title: "Select Model",
+        ...(currentProvider !== undefined && currentId !== undefined ? { selectedValue: `${currentProvider}/${currentId}` } : {}),
+        options: models.map((model) => {
+          const provider = model.provider ?? "";
+          const id = model.id ?? "";
+          const isCurrent = provider === currentProvider && id === currentId;
+          return { value: `${provider}/${id}`, label: `${id}${isCurrent ? " ✓ current" : ""}`, description: provider };
+        }),
+      },
+    });
+  }
+
+  private async pickModel(value: string) {
+    this.setState({ modelDialog: undefined });
+    const slash = value.indexOf("/");
+    if (slash <= 0) return;
+    await this.sessions.setModel(value.slice(0, slash), value.slice(slash + 1));
+  }
+
+  private async openThinkingDialog() {
+    const levels = await this.sessions.listThinkingLevels();
+    const current = this.state.status?.thinkingLevel ?? "off";
+    this.setState({
+      thinkingDialog: {
+        title: "Select Thinking Level",
+        selectedValue: current,
+        options: levels.map((level) => ({ value: level, label: `${level}${level === current ? " ✓ current" : ""}`, description: thinkingDescription(level) })),
+      },
+    });
+  }
+
+  private async pickThinking(value: string) {
+    this.setState({ thinkingDialog: undefined });
+    if (isThinkingLevel(value)) await this.sessions.setThinkingLevel(value);
+  }
+
   override render() {
     const state = this.state;
     return html`
@@ -264,8 +306,10 @@ export class PiWebApp extends LitElement {
           ${state.selectedSession ? html`
             <chat-view .sessionId=${state.selectedSession.id} .messages=${state.messages} .messageStart=${state.messagePageStart} .messageTotal=${state.messagePageTotal} .hasMore=${state.messagePageStart > 0} .loadingMore=${state.isLoadingEarlierMessages} .isReceivingPartialStream=${state.isReceivingPartialStream} .isCompacting=${state.status?.isCompacting === true} .pendingMessageCount=${state.status?.pendingMessageCount ?? 0} .status=${state.status} .activity=${state.activity} .onLoadMore=${() => this.withChatPrependTransition(() => this.sessions.loadEarlierMessages())}></chat-view>
             <prompt-editor .sessionId=${state.selectedSession.id} .cwd=${state.selectedWorkspace?.path} .disabled=${state.selectedSession.archived === true} .canSteer=${state.status?.isStreaming === true} .isCompacting=${state.status?.isCompacting === true} .canStop=${state.status?.isStreaming === true || state.status?.isBashRunning === true || state.status?.isCompacting === true || (state.status?.pendingMessageCount ?? 0) > 0} .onSend=${(text: string, streamingBehavior?: "steer" | "followUp") => this.sessions.send(text, streamingBehavior)} .onStop=${() => this.sessions.stopActiveWork()}></prompt-editor>
-            <status-bar .status=${state.status} .workspace=${state.selectedWorkspace}></status-bar>
+            <status-bar .status=${state.status} .workspace=${state.selectedWorkspace} .onSelectModel=${() => { void this.openModelDialog(); }} .onCycleModel=${(direction: "forward" | "backward") => { void this.sessions.cycleModel(direction); }} .onSelectThinking=${() => { void this.openThinkingDialog(); }} .onCycleThinking=${() => { void this.sessions.cycleThinkingLevel(); }}></status-bar>
             ${state.commandDialog !== undefined ? html`<command-picker .title=${state.commandDialog.title} .options=${state.commandDialog.options} .onPick=${(value: string) => this.sessions.respondToCommand(state.commandDialog?.requestId ?? "", value)} .onCancel=${() => { this.sessions.cancelCommand(); }}></command-picker>` : null}
+            ${state.modelDialog !== undefined ? html`<command-picker title=${state.modelDialog.title} .searchable=${true} .options=${state.modelDialog.options} .selectedValue=${state.modelDialog.selectedValue} .onPick=${(value: string) => { void this.pickModel(value); }} .onCancel=${() => { this.setState({ modelDialog: undefined }); }}></command-picker>` : null}
+            ${state.thinkingDialog !== undefined ? html`<command-picker title=${state.thinkingDialog.title} .options=${state.thinkingDialog.options} .selectedValue=${state.thinkingDialog.selectedValue} .onPick=${(value: string) => { void this.pickThinking(value); }} .onCancel=${() => { this.setState({ thinkingDialog: undefined }); }}></command-picker>` : null}
           ` : html`<div class="empty">Select or start a session.</div>`}
           <div class="mobile-panel">${this.renderWorkspacePanel(true)}</div>
         </main>
@@ -291,4 +335,19 @@ function isActive(status: AppState["status"]): boolean {
 
 function nextFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => { resolve(); }));
+}
+
+function isThinkingLevel(value: string): value is ThinkingLevel {
+  return value === "off" || value === "minimal" || value === "low" || value === "medium" || value === "high" || value === "xhigh";
+}
+
+function thinkingDescription(level: ThinkingLevel): string {
+  switch (level) {
+    case "off": return "No reasoning";
+    case "minimal": return "Very brief reasoning (~1k tokens)";
+    case "low": return "Light reasoning (~2k tokens)";
+    case "medium": return "Moderate reasoning (~8k tokens)";
+    case "high": return "Deep reasoning (~16k tokens)";
+    case "xhigh": return "Maximum reasoning (~32k tokens)";
+  }
 }

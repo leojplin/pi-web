@@ -14,6 +14,7 @@ import {
   parseGitDiffResponse,
   parseGitStatusResponse,
   parseMessagePage,
+  parseModelSelectionResponse,
   parseProject,
   parseRestored,
   parseSessionInfo,
@@ -21,6 +22,7 @@ import {
   parseSlashCommand,
   parseStopped,
   parseTerminalInfo,
+  parseThinkingLevelsResponse,
   parseWorkspace,
 } from "./parsers";
 import { gitDiffUrl, messageUrl } from "./urls";
@@ -43,6 +45,12 @@ export const sessionsApi = {
   startSession: (cwd: string) => request("/api/sessions", parseSessionInfo, { method: "POST", body: JSON.stringify({ cwd }) }),
   messages: (sessionId: string, options?: { limit?: number; before?: number }) => request(messageUrl(sessionId, options), parseMessagePage),
   status: (sessionId: string) => request(`/api/sessions/${sessionId}/status`, parseSessionStatus),
+  models: (sessionId: string) => request(`/api/sessions/${sessionId}/models`, parseModelSelectionResponse),
+  setModel: (sessionId: string, provider: string, modelId: string) => request(`/api/sessions/${sessionId}/model`, parseSessionStatus, { method: "POST", body: JSON.stringify({ provider, modelId }) }),
+  cycleModel: (sessionId: string, direction: "forward" | "backward") => request(`/api/sessions/${sessionId}/model/cycle`, parseSessionStatus, { method: "POST", body: JSON.stringify({ direction }) }),
+  thinkingLevels: (sessionId: string) => request(`/api/sessions/${sessionId}/thinking-levels`, parseThinkingLevelsResponse),
+  setThinkingLevel: (sessionId: string, level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh") => request(`/api/sessions/${sessionId}/thinking-level`, parseSessionStatus, { method: "POST", body: JSON.stringify({ level }) }),
+  cycleThinkingLevel: (sessionId: string) => request(`/api/sessions/${sessionId}/thinking-level/cycle`, parseSessionStatus, { method: "POST" }),
   commands: (sessionId: string) => request(`/api/sessions/${sessionId}/commands`, arrayOf(parseSlashCommand)),
   prompt: (sessionId: string, text: string, streamingBehavior?: "steer" | "followUp") => request(`/api/sessions/${sessionId}/prompt`, parseAccepted, { method: "POST", body: JSON.stringify(streamingBehavior === undefined ? { text } : { text, streamingBehavior }) }),
   shell: (sessionId: string, text: string) => request(`/api/sessions/${sessionId}/shell`, parseAccepted, { method: "POST", body: JSON.stringify({ text }) }),

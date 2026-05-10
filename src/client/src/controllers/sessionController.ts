@@ -1,4 +1,4 @@
-import { api, type CommandResult, type SessionActivity, type SessionInfo, type SessionStatus } from "../api";
+import { api, type CommandResult, type SessionActivity, type SessionInfo, type SessionStatus, type ThinkingLevel } from "../api";
 
 const MESSAGE_PAGE_SIZE = 100;
 import { normalizeMessages, textMessage } from "../chatMessages";
@@ -200,6 +200,68 @@ export class SessionController {
       const detached = { ...session };
       delete detached.parentSessionPath;
       this.replaceSession(detached);
+    } catch (error) {
+      this.setState({ error: String(error) });
+    }
+  }
+
+  async listModels() {
+    const session = this.getState().selectedSession;
+    if (!session || session.archived === true) return [];
+    try {
+      return (await api.models(session.id)).models;
+    } catch (error) {
+      this.setState({ error: String(error) });
+      return [];
+    }
+  }
+
+  async setModel(provider: string, modelId: string) {
+    const session = this.getState().selectedSession;
+    if (!session || session.archived === true) return;
+    try {
+      this.applyStatus(await api.setModel(session.id, provider, modelId));
+    } catch (error) {
+      this.setState({ error: String(error) });
+    }
+  }
+
+  async cycleModel(direction: "forward" | "backward") {
+    const session = this.getState().selectedSession;
+    if (!session || session.archived === true) return;
+    try {
+      this.applyStatus(await api.cycleModel(session.id, direction));
+    } catch (error) {
+      this.setState({ error: String(error) });
+    }
+  }
+
+  async listThinkingLevels() {
+    const session = this.getState().selectedSession;
+    if (!session || session.archived === true) return [];
+    try {
+      return (await api.thinkingLevels(session.id)).levels;
+    } catch (error) {
+      this.setState({ error: String(error) });
+      return [];
+    }
+  }
+
+  async setThinkingLevel(level: ThinkingLevel) {
+    const session = this.getState().selectedSession;
+    if (!session || session.archived === true) return;
+    try {
+      this.applyStatus(await api.setThinkingLevel(session.id, level));
+    } catch (error) {
+      this.setState({ error: String(error) });
+    }
+  }
+
+  async cycleThinkingLevel() {
+    const session = this.getState().selectedSession;
+    if (!session || session.archived === true) return;
+    try {
+      this.applyStatus(await api.cycleThinkingLevel(session.id));
     } catch (error) {
       this.setState({ error: String(error) });
     }

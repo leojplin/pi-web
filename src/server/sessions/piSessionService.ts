@@ -10,7 +10,7 @@ import {
   type AgentSession,
   type CreateAgentSessionRuntimeFactory,
 } from "@earendil-works/pi-coding-agent";
-import type { ClientCommand, ClientCommandResult, ClientMessagePage, ClientSession, ClientSessionStatus, SessionUiEvent } from "../types.js";
+import type { ClientCommand, ClientCommandResult, ClientMessagePage, ClientSession, ClientSessionModel, ClientSessionStatus, ClientThinkingLevel, SessionUiEvent } from "../types.js";
 import type { SessionEventHub } from "../realtime/sessionEventHub.js";
 import { BUILTIN_COMMANDS } from "./builtinCommands.js";
 import { SessionCommandService } from "./sessionCommandService.js";
@@ -149,6 +149,65 @@ export class PiSessionService {
 
   async status(sessionId: string): Promise<ClientSessionStatus> {
     return this.statusFromSession(await this.getOrOpen(sessionId));
+  }
+
+  async availableModels(sessionId: string): Promise<ClientSessionModel[]> {
+    const session = await this.getOrOpen(sessionId);
+    session.modelRegistry.refresh();
+    const models = session.scopedModels.length > 0
+      ? session.scopedModels.map((scoped) => scoped.model)
+      : session.modelRegistry.getAvailable();
+    return models.map(modelToClientModel);
+  }
+
+  async setModel(sessionId: string, provider: string, modelId: string): Promise<ClientSessionStatus> {
+    await this.assertWritable(sessionId);
+    const session = await this.getOrOpen(sessionId);
+    session.modelRegistry.refresh();
+    const candidates = session.scopedModels.length > 0
+      ? session.scopedModels.map((scoped) => scoped.model)
+      : session.modelRegistry.getAvailable();
+    const model = candidates.find((candidate) => candidate.provider === provider && candidate.id === modelId)
+      ?? session.modelRegistry.find(provider, modelId);
+    if (model === undefined) throw new Error(`Model not found: ${provider}/${modelId}`);
+    await session.setModel(model);
+    this.publishActivity(session, `model: ${model.id}`, "idle", model.provider);
+    this.publishStatus(session);
+    return this.statusFromSession(session);
+  }
+
+  async cycleModel(sessionId: string, direction: "forward" | "backward"): Promise<ClientSessionStatus> {
+    await this.assertWritable(sessionId);
+    const session = await this.getOrOpen(sessionId);
+    const result = await session.cycleModel(direction);
+    if (result === undefined) throw new Error(session.scopedModels.length > 0 ? "Only one model in scope" : "Only one model available");
+    this.publishActivity(session, `model: ${result.model.id}`, "idle", result.model.provider);
+    this.publishStatus(session);
+    return this.statusFromSession(session);
+  }
+
+  async availableThinkingLevels(sessionId: string): Promise<ClientThinkingLevel[]> {
+    const session = await this.getOrOpen(sessionId);
+    return session.getAvailableThinkingLevels();
+  }
+
+  async setThinkingLevel(sessionId: string, level: ClientThinkingLevel): Promise<ClientSessionStatus> {
+    await this.assertWritable(sessionId);
+    const session = await this.getOrOpen(sessionId);
+    session.setThinkingLevel(level);
+    this.publishActivity(session, `thinking: ${session.thinkingLevel}`, "idle");
+    this.publishStatus(session);
+    return this.statusFromSession(session);
+  }
+
+  async cycleThinkingLevel(sessionId: string): Promise<ClientSessionStatus> {
+    await this.assertWritable(sessionId);
+    const session = await this.getOrOpen(sessionId);
+    const level = session.cycleThinkingLevel();
+    if (level === undefined) throw new Error("Current model does not support thinking");
+    this.publishActivity(session, `thinking: ${level}`, "idle");
+    this.publishStatus(session);
+    return this.statusFromSession(session);
   }
 
   async commands(sessionId: string): Promise<ClientCommand[]> {
@@ -402,19 +461,7 @@ export class PiSessionService {
 
   private statusFromSession(session: AgentSession): ClientSessionStatus {
     const stats = session.getSessionStats();
-    const model = session.model === undefined
-      ? undefined
-      : (() => {
-          const name = getString(session.model, "name");
-          const reasoning = getProperty(session.model, "reasoning");
-          return {
-            provider: session.model.provider,
-            id: session.model.id,
-            ...(name === undefined ? {} : { name }),
-            contextWindow: session.model.contextWindow,
-            ...(reasoning === undefined ? {} : { reasoning }),
-          };
-        })();
+    const model = session.model === undefined ? undefined : modelToClientModel(session.model);
     const contextUsage = session.getContextUsage();
     return {
       sessionId: session.sessionId,
@@ -432,6 +479,19 @@ export class PiSessionService {
   }
 }
 
+function modelToClientModel(model: AgentSession["model"]): ClientSessionModel {
+  if (model === undefined) return {};
+  const name = getString(model, "name");
+  const reasoning = getProperty(model, "reasoning");
+  return {
+    provider: model.provider,
+    id: model.id,
+    ...(name === undefined ? {} : { name }),
+    contextWindow: model.contextWindow,
+    ...(reasoning === undefined ? {} : { reasoning }),
+  };
+}
+
 async function clearParentSession(sessionFile: string): Promise<void> {
   const content = await readFile(sessionFile, "utf8");
   const newlineIndex = content.indexOf("\n");
@@ -445,8 +505,7 @@ async function clearParentSession(sessionFile: string): Promise<void> {
 }
 
 function clearSessionQueue(session: AgentSession): void {
-  const candidate = session as AgentSession & { clearQueue?: () => unknown };
-  candidate.clearQueue?.();
+  session.clearQueue();
 }
 
 function hasQueuedMessageText(session: AgentSession, text: string): boolean {
@@ -454,10 +513,9 @@ function hasQueuedMessageText(session: AgentSession, text: string): boolean {
 }
 
 function queuedMessagesFromSession(session: AgentSession): { kind: "steer" | "followUp"; text: string }[] {
-  const candidate = session as AgentSession & { getSteeringMessages?: () => string[]; getFollowUpMessages?: () => string[] };
   return [
-    ...(candidate.getSteeringMessages?.() ?? []).map((text) => ({ kind: "steer" as const, text })),
-    ...(candidate.getFollowUpMessages?.() ?? []).map((text) => ({ kind: "followUp" as const, text })),
+    ...session.getSteeringMessages().map((text) => ({ kind: "steer" as const, text })),
+    ...session.getFollowUpMessages().map((text) => ({ kind: "followUp" as const, text })),
   ];
 }
 

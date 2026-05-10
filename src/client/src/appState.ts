@@ -1,4 +1,4 @@
-import type { CommandResult, FileContentResponse, FileTreeEntry, GitDiffResponse, GitStatusResponse, Project, SessionActivity, SessionInfo, SessionStatus, Workspace } from "./api";
+import type { CommandOption, CommandResult, FileContentResponse, FileTreeEntry, GitDiffResponse, GitStatusResponse, Project, SessionActivity, SessionInfo, SessionStatus, Workspace } from "./api";
 import type { ChatLine } from "./components/shared";
 import type { QualifiedContributionId } from "./plugins/types";
 
@@ -19,6 +19,8 @@ export interface AppState {
   sessionStatuses: Record<string, SessionStatus>;
   sessionActivities: Record<string, SessionActivity>;
   commandDialog: Extract<CommandResult, { type: "select" }> | undefined;
+  modelDialog: { title: string; options: CommandOption[]; selectedValue?: string } | undefined;
+  thinkingDialog: { title: string; options: CommandOption[]; selectedValue?: string } | undefined;
   actionPaletteOpen: boolean;
   projectDialogOpen: boolean;
   workspaceTool: QualifiedContributionId;
@@ -54,6 +56,8 @@ export function initialAppState(): AppState {
     sessionStatuses: {},
     sessionActivities: {},
     commandDialog: undefined,
+    modelDialog: undefined,
+    thinkingDialog: undefined,
     actionPaletteOpen: false,
     projectDialogOpen: false,
     workspaceTool: "core:workspace.files",

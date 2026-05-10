@@ -33,6 +33,54 @@ export function registerSessionRoutes(app: FastifyInstance, sessions: PiSessionS
     }
   });
 
+  app.get<{ Params: { sessionId: string } }>(`${prefix}/sessions/:sessionId/models`, async (request, reply) => {
+    try {
+      return { models: await sessions.availableModels(request.params.sessionId) };
+    } catch (error) {
+      return reply.code(404).send({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post<{ Params: { sessionId: string }; Body: { provider: string; modelId: string } }>(`${prefix}/sessions/:sessionId/model`, async (request, reply) => {
+    try {
+      return await sessions.setModel(request.params.sessionId, request.body.provider, request.body.modelId);
+    } catch (error) {
+      return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post<{ Params: { sessionId: string }; Body: { direction?: "forward" | "backward" } }>(`${prefix}/sessions/:sessionId/model/cycle`, async (request, reply) => {
+    try {
+      return await sessions.cycleModel(request.params.sessionId, request.body.direction ?? "forward");
+    } catch (error) {
+      return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.get<{ Params: { sessionId: string } }>(`${prefix}/sessions/:sessionId/thinking-levels`, async (request, reply) => {
+    try {
+      return { levels: await sessions.availableThinkingLevels(request.params.sessionId) };
+    } catch (error) {
+      return reply.code(404).send({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post<{ Params: { sessionId: string }; Body: { level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" } }>(`${prefix}/sessions/:sessionId/thinking-level`, async (request, reply) => {
+    try {
+      return await sessions.setThinkingLevel(request.params.sessionId, request.body.level);
+    } catch (error) {
+      return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.post<{ Params: { sessionId: string } }>(`${prefix}/sessions/:sessionId/thinking-level/cycle`, async (request, reply) => {
+    try {
+      return await sessions.cycleThinkingLevel(request.params.sessionId);
+    } catch (error) {
+      return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
   app.get<{ Params: { sessionId: string } }>(`${prefix}/sessions/:sessionId/commands`, async (request, reply) => {
     try {
       return await sessions.commands(request.params.sessionId);

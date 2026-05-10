@@ -18,21 +18,6 @@ export function registerSessionProxyRoutes(app: FastifyInstance, daemon = new Se
 
   app.get("/api/sessiond/health", (_request, reply) => proxy({ method: "GET", url: "/api/health" }, reply));
 
-  app.get<{ Querystring: { cwd?: string } }>("/api/sessions", (request, reply) => proxy(request, reply));
-  app.post<{ Body: { cwd: string } }>("/api/sessions", (request, reply) => proxy(request, reply));
-  app.get<{ Params: { sessionId: string } }>("/api/sessions/:sessionId/messages", (request, reply) => proxy(request, reply));
-  app.get<{ Params: { sessionId: string } }>("/api/sessions/:sessionId/status", (request, reply) => proxy(request, reply));
-  app.get<{ Params: { sessionId: string } }>("/api/sessions/:sessionId/commands", (request, reply) => proxy(request, reply));
-  app.post<{ Params: { sessionId: string }; Body: { text: string; streamingBehavior?: "steer" | "followUp" } }>("/api/sessions/:sessionId/prompt", (request, reply) => proxy(request, reply));
-  app.post<{ Params: { sessionId: string }; Body: { text: string } }>("/api/sessions/:sessionId/shell", (request, reply) => proxy(request, reply));
-  app.post<{ Params: { sessionId: string }; Body: { text: string } }>("/api/sessions/:sessionId/commands/run", (request, reply) => proxy(request, reply));
-  app.post<{ Params: { sessionId: string }; Body: { requestId: string; value: string } }>("/api/sessions/:sessionId/commands/respond", (request, reply) => proxy(request, reply));
-  app.post<{ Params: { sessionId: string } }>("/api/sessions/:sessionId/abort", (request, reply) => proxy(request, reply));
-  app.post<{ Params: { sessionId: string } }>("/api/sessions/:sessionId/stop", (request, reply) => proxy(request, reply));
-  app.post<{ Params: { sessionId: string } }>("/api/sessions/:sessionId/archive", (request, reply) => proxy(request, reply));
-  app.post<{ Params: { sessionId: string } }>("/api/sessions/:sessionId/restore", (request, reply) => proxy(request, reply));
-  app.post<{ Params: { sessionId: string } }>("/api/sessions/:sessionId/detach-parent", (request, reply) => proxy(request, reply));
-
   app.get<{ Params: { sessionId: string } }>("/api/sessions/:sessionId/events", { websocket: true }, (socket, request) => {
     bridgeSockets(socket, daemon.connectWebSocket(`/sessions/${request.params.sessionId}/events`));
   });
@@ -40,6 +25,9 @@ export function registerSessionProxyRoutes(app: FastifyInstance, daemon = new Se
   app.get("/api/sessions/events", { websocket: true }, (socket) => {
     bridgeSockets(socket, daemon.connectWebSocket("/sessions/events"));
   });
+
+  app.all("/api/sessions", (request, reply) => proxy(request, reply));
+  app.all("/api/sessions/*", (request, reply) => proxy(request, reply));
 }
 
 function stripApiPrefix(url: string): string {

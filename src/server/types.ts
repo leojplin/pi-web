@@ -4,6 +4,8 @@ export type {
   SessionInfo as ClientSession,
   MessagePage as ClientMessagePage,
   SessionStatus as ClientSessionStatus,
+  SessionModel as ClientSessionModel,
+  ThinkingLevel as ClientThinkingLevel,
   SlashCommand as ClientCommand,
   FileSuggestion as ClientFileSuggestion,
   CommandOption as ClientCommandOption,

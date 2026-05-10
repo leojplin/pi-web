@@ -8,6 +8,10 @@ import { statusBarStyles } from "./shared";
 export class StatusBar extends LitElement {
   @property({ attribute: false }) status?: SessionStatus;
   @property({ attribute: false }) workspace?: Workspace;
+  @property({ attribute: false }) onSelectModel?: () => void;
+  @property({ attribute: false }) onCycleModel?: (direction: "forward" | "backward") => void;
+  @property({ attribute: false }) onSelectThinking?: () => void;
+  @property({ attribute: false }) onCycleThinking?: () => void;
 
   override render() {
     const status = this.status;
@@ -24,8 +28,15 @@ export class StatusBar extends LitElement {
     return html`
       <div class="bar">
         <span title=${this.workspace?.path ?? ""}>${this.workspace?.label ?? "workspace"}</span>
-        <span>${provider}${model}</span>
-        <span>thinking ${status.thinkingLevel ?? "off"}</span>
+        <span class="control-group">
+          <button title="Previous model" @click=${() => this.onCycleModel?.("backward")}>‹</button>
+          <button title="Select model" @click=${() => this.onSelectModel?.()}>${provider}${model}</button>
+          <button title="Next model" @click=${() => this.onCycleModel?.("forward")}>›</button>
+        </span>
+        <span class="control-group">
+          <button title="Cycle thinking level" @click=${() => this.onCycleThinking?.()}>thinking ${status.thinkingLevel ?? "off"}</button>
+          <button title="Select thinking level" @click=${() => this.onSelectThinking?.()}>⌄</button>
+        </span>
         <span>↑${formatTokenCount(tokens.input)}</span>
         <span>↓${formatTokenCount(tokens.output)}</span>
         <span>${contextText}</span>

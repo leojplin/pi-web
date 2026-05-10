@@ -224,6 +224,9 @@ export const statusBarStyles = css`
   :host { display: block; color: #8b949e; font: 12px system-ui, sans-serif; }
   .bar { display: flex; gap: 12px; align-items: center; min-width: 0; padding: 7px 12px; border-top: 1px solid #30363d; background: #0d1117; white-space: nowrap; overflow: hidden; }
   span { overflow: hidden; text-overflow: ellipsis; }
+  button { border: 0; border-radius: 4px; background: transparent; color: inherit; padding: 1px 3px; font: inherit; cursor: pointer; }
+  button:hover, button:focus { background: #21262d; color: #e6edf3; }
+  .control-group { display: inline-flex; align-items: center; gap: 2px; flex: 0 1 auto; min-width: 0; }
   .bar > span:first-child { flex: 1 1 auto; min-width: 80px; }
   .activity { display: inline-flex; align-items: center; gap: 6px; color: #8b949e; }
   .activity.active { color: #3fb950; }
@@ -251,9 +254,12 @@ export const commandPickerStyles = css`
   .options { min-height: 0; overflow: auto; outline: none; }
   button { border: 0; background: transparent; color: #e6edf3; cursor: pointer; }
   header button { font-size: 20px; color: #8b949e; }
+  input { margin: 10px 12px; border: 1px solid #30363d; border-radius: 8px; background: #0d1117; color: #e6edf3; font: 14px system-ui, sans-serif; padding: 8px 10px; outline: none; }
+  input:focus { border-color: #58a6ff; }
   .options button { display: block; width: 100%; padding: 10px 12px; border-bottom: 1px solid #21262d; text-align: left; }
   .options button.selected, .options button:hover { background: #0d2847; }
   small { display: block; margin-top: 4px; color: #8b949e; }
+  .empty { padding: 24px; color: #8b949e; text-align: center; }
 `;
 
 export const actionPaletteStyles = css`
