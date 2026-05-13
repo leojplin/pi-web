@@ -1,0 +1,23 @@
+{
+  "skill_name": "changeset-changelog",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "We fixed the session reconnect bug. Please prepare the changelog entry and commit message.",
+      "expected_output": "The assistant should create or propose a .changeset/*.md patch fragment with user-facing wording and a Conventional Commit style fix message, without editing CHANGELOG.md directly.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Add release notes for this new CLI option before we merge.",
+      "expected_output": "The assistant should add a changeset fragment for @jmfederico/pi-web with an appropriate minor or patch bump depending on the option, and keep the text user-facing.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Can we update CHANGELOG.md now with the fix I just made?",
+      "expected_output": "The assistant should explain that normal development should use a .changeset fragment instead of manually editing CHANGELOG.md, then offer to create that fragment.",
+      "files": []
+    }
+  ]
+}

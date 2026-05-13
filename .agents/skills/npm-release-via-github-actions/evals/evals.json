@@ -1,0 +1,23 @@
+{
+  "skill_name": "npm-release-via-github-actions",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Please make a new npm release for this package. Use the next patch version.",
+      "expected_output": "The assistant should inspect package.json, pending Changesets, and the GitHub Actions publish workflow; run changeset version to generate CHANGELOG.md/version files; avoid local npm publish; run verification; commit/push; create a GitHub Release using changelog notes; monitor the publish workflow; and verify npm.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "bump npm to 1.202605.4 and publish it",
+      "expected_output": "The assistant should use the explicit version, avoid local npm publish, generate/update CHANGELOG.md through Changesets, enforce the requested version with --no-git-tag-version only if needed, push a release commit, create a GitHub Release that triggers publish.yml, and report action/npm status.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "The npm publish action failed last night; can you get the release published?",
+      "expected_output": "The assistant should inspect the failed GitHub Actions run and rerun or fix it through GitHub Actions. It should not use local npm publish as a workaround, and should preserve the generated changelog/release notes.",
+      "files": []
+    }
+  ]
+}

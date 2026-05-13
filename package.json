@@ -37,7 +37,10 @@
     "pack:dry": "npm pack --dry-run",
     "prepublishOnly": "npm run verify",
     "publish:npm": "npm publish --access public",
-    "prepare": "node scripts/install-git-hooks.mjs"
+    "prepare": "node scripts/install-git-hooks.mjs",
+    "changeset": "changeset",
+    "release:version": "changeset version",
+    "changelog:status": "changeset status"
   },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",
@@ -61,6 +64,7 @@
     "ws": "^8.18.3"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.31.0",
     "@earendil-works/pi-coding-agent": "^0.74.0",
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.10.1",
