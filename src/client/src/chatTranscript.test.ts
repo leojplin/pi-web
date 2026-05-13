@@ -132,6 +132,25 @@ describe("applyTranscriptEvent", () => {
     ]);
   });
 
+  it("does not merge optimistic user messages after an aborted turn", () => {
+    const messages = [textMessage("user", "stopped prompt")];
+
+    expect(applyTranscriptEvent(messages, { type: "message.append", message: { role: "user", content: "new prompt" } })).toEqual([
+      textMessage("user", "stopped prompt"),
+      textMessage("user", "new prompt"),
+    ]);
+  });
+
+  it("replaces a new optimistic user message instead of duplicating it after an aborted turn", () => {
+    let messages: ChatLine[] = [textMessage("user", "stopped prompt")];
+    messages = applyTranscriptEvent(messages, { type: "message.append", message: { role: "user", content: "new prompt" } }) ?? messages;
+
+    expect(applyTranscriptEvent(messages, { type: "message.end", message: { role: "user", content: "new prompt", timestamp: "2026-05-09T12:00:00.000Z" } })).toEqual([
+      textMessage("user", "stopped prompt"),
+      { ...textMessage("user", "new prompt"), meta: { timestamp: "2026-05-09T12:00:00.000Z" } },
+    ]);
+  });
+
   it("replaces an optimistic user message when the finalized text matches", () => {
     const messages = [textMessage("user", "sent prompt")];
 

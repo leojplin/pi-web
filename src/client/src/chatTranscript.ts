@@ -4,7 +4,7 @@ import { appendShellChunk, finalizeShellMessage, shellStartMessage } from "./she
 import type { SessionUiEvent } from "./sessionSocket";
 
 export function applyTranscriptEvent(messages: ChatLine[], event: SessionUiEvent): ChatLine[] | undefined {
-  if (event.type === "message.append") return appendNormalized(messages, event.message);
+  if (event.type === "message.append") return appendNewMessage(messages, event.message);
   if (event.type === "assistant.delta") return appendText(messages, "assistant", event.text);
   if (event.type === "assistant.thinking.delta") return appendThinking(messages, event.text);
   if (event.type === "tool.start") return appendNormalized(messages, { role: "assistant", content: [{ type: "toolCall", name: event.toolName, arguments: event.args }] });
@@ -70,6 +70,11 @@ function messageText(message: ChatLine): string {
     .filter((part): part is Extract<ChatLine["parts"][number], { type: "text" }> => part.type === "text")
     .map((part) => part.text)
     .join("\n\n");
+}
+
+function appendNewMessage(messages: ChatLine[], rawMessage: unknown): ChatLine[] {
+  const lines = normalizeMessage(rawMessage);
+  return lines.length === 0 ? messages : [...messages, ...lines];
 }
 
 function appendNormalized(messages: ChatLine[], rawMessage: unknown): ChatLine[] {
