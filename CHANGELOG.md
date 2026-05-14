@@ -1,5 +1,13 @@
 # @jmfederico/pi-web
 
+## 1.202605.6
+
+### Patch Changes
+
+- 559436c: Install Pi Web services from the Pi extension using the normal login-shell command shims instead of hardcoded Node paths, so sessions use the same PATH for node and npm.
+- c547478: Keep mobile workspace selection in the Sessions view so users can confirm the remembered session before opening chat, and restore mobile URLs without an explicit view back to Sessions.
+- 42b9c53: Remove unsupported direct GitHub install instructions from the README.
+
 ## 1.202605.5
 
 ### Patch Changes
