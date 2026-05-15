@@ -52,14 +52,18 @@ body::after {
 .home-page .hero-actions,
 .home-page .hero-stats,
 .home-page .terminal,
-.home-page main > section:not(.hero),
+.home-page main > section:not(.hero) {
+  opacity: 0;
+  animation: page-reveal 700ms ease-out 2.45s forwards;
+}
+
 .error-page .site-header,
 .error-page .site-footer,
 .error-page .error-code,
 .error-page .error-copy,
 .error-page .error-actions {
   opacity: 0;
-  animation: page-reveal 700ms ease-out 2.45s forwards;
+  animation: page-reveal 700ms ease-out 1.55s forwards;
 }
 
 .intro-target {
