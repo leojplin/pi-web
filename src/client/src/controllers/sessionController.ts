@@ -1,28 +1,45 @@
-import { api, type CommandResult, type SessionActivity, type SessionInfo, type SessionStatus, type ThinkingLevel } from "../api";
-
-const MESSAGE_PAGE_SIZE = 100;
-import { normalizeMessages, textMessage } from "../chatMessages";
-import { readChatHistoryCache, mergeChatHistory, writeChatHistoryCache, type RawMessagePage } from "../chatHistoryCache";
-import { applyTranscriptEvent } from "../chatTranscript";
+import { api as defaultApi, type CommandResult, type SessionActivity, type SessionInfo, type SessionStatus, type ThinkingLevel } from "../api";
+import { textMessage } from "../chatMessages";
+import { ChatTranscriptStore } from "../chatTranscriptStore";
 import { isShellInput } from "../inputModes";
 import { SessionSocket, type GlobalSessionEvent, type SessionUiEvent } from "../sessionSocket";
 import { InMemorySessionSelectionMemory, markSessionArchived, selectPreferredSession, selectionAfterArchivingSession, type SessionSelectionMemory } from "./sessionSelection";
 import type { GetState, SetState, UpdateUrl } from "./types";
 
+const MESSAGE_PAGE_SIZE = 100;
+
+export interface SessionEventSocket {
+  connect(sessionId: string, onEvent: (event: SessionUiEvent) => void, onReconnect?: () => void): void;
+  setHandler(onEvent: (event: SessionUiEvent) => void): void;
+  close(): void;
+}
+
+export interface SessionControllerDependencies {
+  api?: typeof defaultApi;
+  socket?: SessionEventSocket;
+  transcripts?: ChatTranscriptStore;
+}
+
 export class SessionController {
-  private readonly socket = new SessionSocket();
+  private readonly socket: SessionEventSocket;
+  private readonly api: typeof defaultApi;
+  private readonly transcripts: ChatTranscriptStore;
   private selectionSeq = 0;
   private catchupStreamSessionId: string | undefined;
   private pendingTranscriptEvents: SessionUiEvent[] = [];
   private pendingTranscriptFrame: number | undefined;
-  private readonly rawHistoryPages = new Map<string, RawMessagePage>();
 
   constructor(
     private readonly getState: GetState,
     private readonly setState: SetState,
     private readonly updateUrl: UpdateUrl,
     private readonly sessionSelection: SessionSelectionMemory = new InMemorySessionSelectionMemory(),
-  ) {}
+    deps: SessionControllerDependencies = {},
+  ) {
+    this.socket = deps.socket ?? new SessionSocket();
+    this.api = deps.api ?? defaultApi;
+    this.transcripts = deps.transcripts ?? new ChatTranscriptStore();
+  }
 
   applyGlobalEvent(event: GlobalSessionEvent): void {
     if (event.type === "status.update") this.applyStatus(event.status);
@@ -46,7 +63,7 @@ export class SessionController {
     const workspace = this.getState().selectedWorkspace;
     if (!workspace) return;
     try {
-      const session = await api.startSession(workspace.path);
+      const session = await this.api.startSession(workspace.path);
       this.setState({ sessions: [session, ...this.getState().sessions] });
       await this.selectSession(session);
     } catch (error) {
@@ -64,12 +81,10 @@ export class SessionController {
     this.socket.close();
     this.catchupStreamSessionId = undefined;
     this.clearPendingTranscriptEvents();
-    const cached = this.rawHistoryPage(session.id);
+    const cached = this.transcripts.cachedView(session.id);
     this.setState({
       selectedSession: session,
-      messages: normalizeMessages(cached?.messages ?? []),
-      messagePageStart: cached?.start ?? 0,
-      messagePageTotal: cached?.total ?? 0,
+      ...cached,
       isLoadingEarlierMessages: false,
       isReceivingPartialStream: false,
       status: session.archived === true ? undefined : this.getState().sessionStatuses[session.id],
@@ -77,10 +92,10 @@ export class SessionController {
     });
     try {
       if (session.archived === true) {
-        const page = await api.messages(session.id, { limit: MESSAGE_PAGE_SIZE });
+        const page = await this.api.messages(session.id, { limit: MESSAGE_PAGE_SIZE });
         if (seq !== this.selectionSeq || this.getState().selectedSession?.id !== session.id) return;
-        const history = this.mergeAndCacheHistory(session.id, page, cached);
-        this.setState({ messages: normalizeMessages(history.messages), messagePageStart: history.start, messagePageTotal: history.total, isLoadingEarlierMessages: false, isReceivingPartialStream: false, status: undefined, activity: undefined });
+        const history = this.transcripts.mergeHistory(session.id, page);
+        this.setState({ ...history, isLoadingEarlierMessages: false, isReceivingPartialStream: false, status: undefined, activity: undefined });
         if (options?.updateUrl !== false) this.updateUrl();
         return;
       }
@@ -90,12 +105,12 @@ export class SessionController {
         (event) => buffered.push(event),
         () => { void this.refreshSelectedSession(session.id); },
       );
-      const [page, status] = await Promise.all([api.messages(session.id, { limit: MESSAGE_PAGE_SIZE }), api.status(session.id)]);
+      const [page, status] = await Promise.all([this.api.messages(session.id, { limit: MESSAGE_PAGE_SIZE }), this.api.status(session.id)]);
       if (seq !== this.selectionSeq || this.getState().selectedSession?.id !== session.id) return;
-      const history = this.mergeAndCacheHistory(session.id, page, cached);
+      const history = this.transcripts.mergeHistory(session.id, page);
       const isReceivingPartialStream = status.isStreaming;
       this.catchupStreamSessionId = isReceivingPartialStream ? session.id : undefined;
-      this.setState({ messages: normalizeMessages(history.messages), messagePageStart: history.start, messagePageTotal: history.total, isLoadingEarlierMessages: false, isReceivingPartialStream, status, activity: this.getState().sessionActivities[session.id] });
+      this.setState({ ...history, isLoadingEarlierMessages: false, isReceivingPartialStream, status, activity: this.getState().sessionActivities[session.id] });
       this.applyStatus(status);
       for (const event of buffered) this.applyEvent(event);
       this.socket.setHandler((event) => { this.applyEvent(event); });
@@ -111,15 +126,10 @@ export class SessionController {
     if (!session || state.isLoadingEarlierMessages || state.messagePageStart <= 0) return;
     this.setState({ isLoadingEarlierMessages: true });
     try {
-      const base = this.rawHistoryPage(session.id);
-      const page = await api.messages(session.id, { before: state.messagePageStart, limit: MESSAGE_PAGE_SIZE });
+      const page = await this.api.messages(session.id, { before: state.messagePageStart, limit: MESSAGE_PAGE_SIZE });
       if (this.getState().selectedSession?.id !== session.id) return;
-      const history = this.mergeAndCacheHistory(session.id, page, base);
-      this.setState({
-        messages: normalizeMessages(history.messages),
-        messagePageStart: history.start,
-        messagePageTotal: history.total,
-      });
+      const history = this.transcripts.mergeHistory(session.id, page);
+      this.setState(history);
     } catch (error) {
       this.setState({ error: String(error) });
     } finally {
@@ -134,7 +144,7 @@ export class SessionController {
     const session = this.getState().selectedSession;
     if (!session || session.archived === true) return;
     try {
-      await api.prompt(session.id, text, streamingBehavior);
+      await this.api.prompt(session.id, text, streamingBehavior);
     } catch (error) {
       this.setState({ error: String(error) });
     }
@@ -145,7 +155,7 @@ export class SessionController {
     if (!session || session.archived === true) return;
     this.setState({ messages: [...this.getState().messages, textMessage("user", text)] });
     try {
-      await api.shell(session.id, text);
+      await this.api.shell(session.id, text);
     } catch (error) {
       this.setState({ messages: [...this.getState().messages, textMessage("system", String(error))], error: String(error) });
     }
@@ -156,7 +166,7 @@ export class SessionController {
     if (!session || session.archived === true) return;
     this.setState({ messages: [...this.getState().messages, textMessage("user", text)] });
     try {
-      this.applyCommandResult(await api.runCommand(session.id, text));
+      this.applyCommandResult(await this.api.runCommand(session.id, text));
     } catch (error) {
       this.setState({ messages: [...this.getState().messages, textMessage("system", String(error))], error: String(error) });
     }
@@ -167,7 +177,7 @@ export class SessionController {
     if (!session) return;
     this.setState({ commandDialog: undefined });
     try {
-      this.applyCommandResult(await api.respondToCommand(session.id, requestId, value));
+      this.applyCommandResult(await this.api.respondToCommand(session.id, requestId, value));
     } catch (error) {
       this.setState({ error: String(error) });
     }
@@ -180,7 +190,7 @@ export class SessionController {
   async archiveSession(session = this.getState().selectedSession) {
     if (!session) return;
     try {
-      await api.archive(session.id);
+      await this.api.archive(session.id);
       const state = this.getState();
       const sessions = markSessionArchived(state.sessions, session.id, new Date().toISOString());
       const selectionChange = selectionAfterArchivingSession(sessions, state.selectedSession?.id, session.id);
@@ -199,7 +209,7 @@ export class SessionController {
   async restoreSession(session = this.getState().selectedSession) {
     if (!session) return;
     try {
-      await api.restore(session.id);
+      await this.api.restore(session.id);
       const restored = { ...session };
       delete restored.archived;
       delete restored.archivedAt;
@@ -213,7 +223,7 @@ export class SessionController {
   async detachParent(session = this.getState().selectedSession) {
     if (session?.parentSessionPath === undefined) return;
     try {
-      await api.detachParent(session.id);
+      await this.api.detachParent(session.id);
       const detached = { ...session };
       delete detached.parentSessionPath;
       this.replaceSession(detached);
@@ -226,7 +236,7 @@ export class SessionController {
     const session = this.getState().selectedSession;
     if (!session || session.archived === true) return [];
     try {
-      return (await api.models(session.id)).models;
+      return (await this.api.models(session.id)).models;
     } catch (error) {
       this.setState({ error: String(error) });
       return [];
@@ -237,7 +247,7 @@ export class SessionController {
     const session = this.getState().selectedSession;
     if (!session || session.archived === true) return;
     try {
-      this.applyStatus(await api.setModel(session.id, provider, modelId));
+      this.applyStatus(await this.api.setModel(session.id, provider, modelId));
     } catch (error) {
       this.setState({ error: String(error) });
     }
@@ -247,7 +257,7 @@ export class SessionController {
     const session = this.getState().selectedSession;
     if (!session || session.archived === true) return;
     try {
-      this.applyStatus(await api.cycleModel(session.id, direction));
+      this.applyStatus(await this.api.cycleModel(session.id, direction));
     } catch (error) {
       this.setState({ error: String(error) });
     }
@@ -257,7 +267,7 @@ export class SessionController {
     const session = this.getState().selectedSession;
     if (!session || session.archived === true) return [];
     try {
-      return (await api.thinkingLevels(session.id)).levels;
+      return (await this.api.thinkingLevels(session.id)).levels;
     } catch (error) {
       this.setState({ error: String(error) });
       return [];
@@ -268,7 +278,7 @@ export class SessionController {
     const session = this.getState().selectedSession;
     if (!session || session.archived === true) return;
     try {
-      this.applyStatus(await api.setThinkingLevel(session.id, level));
+      this.applyStatus(await this.api.setThinkingLevel(session.id, level));
     } catch (error) {
       this.setState({ error: String(error) });
     }
@@ -278,7 +288,7 @@ export class SessionController {
     const session = this.getState().selectedSession;
     if (!session || session.archived === true) return;
     try {
-      this.applyStatus(await api.cycleThinkingLevel(session.id));
+      this.applyStatus(await this.api.cycleThinkingLevel(session.id));
     } catch (error) {
       this.setState({ error: String(error) });
     }
@@ -288,7 +298,7 @@ export class SessionController {
     const session = this.getState().selectedSession;
     if (!session) return;
     try {
-      await api.abort(session.id);
+      await this.api.abort(session.id);
     } catch (error) {
       this.setState({ error: String(error) });
     }
@@ -299,14 +309,11 @@ export class SessionController {
     if (sessionId === undefined || session?.id !== sessionId || session.archived === true) return;
     try {
       this.flushPendingTranscriptEvents();
-      const base = this.rawHistoryPage(sessionId);
-      const [page, status] = await Promise.all([api.messages(sessionId, { limit: MESSAGE_PAGE_SIZE }), api.status(sessionId)]);
+      const [page, status] = await Promise.all([this.api.messages(sessionId, { limit: MESSAGE_PAGE_SIZE }), this.api.status(sessionId)]);
       if (this.getState().selectedSession?.id !== sessionId) return;
-      const history = this.mergeAndCacheHistory(sessionId, page, base);
+      const history = this.transcripts.mergeHistory(sessionId, page);
       this.setState({
-        messages: normalizeMessages(history.messages),
-        messagePageStart: history.start,
-        messagePageTotal: history.total,
+        ...history,
         status,
         activity: this.getState().sessionActivities[sessionId],
         isReceivingPartialStream: status.isStreaming,
@@ -323,19 +330,6 @@ export class SessionController {
       sessions: this.getState().sessions.map((candidate) => candidate.id === session.id ? session : candidate),
       selectedSession: current?.id === session.id ? session : current,
     });
-  }
-
-  private mergeAndCacheHistory(sessionId: string, page: RawMessagePage, base = this.rawHistoryPage(sessionId)): RawMessagePage {
-    const history = mergeChatHistory(base, page);
-    this.rawHistoryPages.set(sessionId, history);
-    writeChatHistoryCache(sessionId, history);
-    return history;
-  }
-
-  private rawHistoryPage(sessionId: string): RawMessagePage | undefined {
-    const cached = this.rawHistoryPages.get(sessionId) ?? readChatHistoryCache(sessionId);
-    if (cached !== undefined) this.rawHistoryPages.set(sessionId, cached);
-    return cached;
   }
 
   private applyCommandResult(result: CommandResult) {
@@ -399,7 +393,7 @@ export class SessionController {
     }
 
     this.flushPendingTranscriptEvents();
-    const transcript = applyTranscriptEvent(this.getState().messages, event);
+    const transcript = this.transcripts.applyLiveEvent(this.getState().messages, event);
     if (transcript) {
       this.setState({ messages: transcript });
     } else if (event.type === "status.update") {
@@ -425,7 +419,7 @@ export class SessionController {
     const events = this.pendingTranscriptEvents;
     this.pendingTranscriptEvents = [];
     let messages = this.getState().messages;
-    for (const event of events) messages = applyTranscriptEvent(messages, event) ?? messages;
+    for (const event of events) messages = this.transcripts.applyLiveEvent(messages, event) ?? messages;
     if (messages !== this.getState().messages) this.setState({ messages });
   }
 
@@ -445,11 +439,9 @@ export class SessionController {
 
   private async refreshMessages(sessionId: string) {
     try {
-      const base = this.rawHistoryPage(sessionId);
-      const page = await api.messages(sessionId, { limit: MESSAGE_PAGE_SIZE });
+      const page = await this.api.messages(sessionId, { limit: MESSAGE_PAGE_SIZE });
       if (this.getState().selectedSession?.id !== sessionId) return;
-      const history = this.mergeAndCacheHistory(sessionId, page, base);
-      this.setState({ messages: normalizeMessages(history.messages), messagePageStart: history.start, messagePageTotal: history.total });
+      this.setState(this.transcripts.mergeHistory(sessionId, page));
     } catch (error) {
       if (this.getState().selectedSession?.id === sessionId) this.setState({ error: String(error) });
     }
