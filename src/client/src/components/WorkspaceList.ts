@@ -10,18 +10,21 @@ import { renderWorkspaceLabelItems } from "./workspaceLabel";
 export class WorkspaceList extends LitElement {
   @property({ attribute: false }) workspaces: Workspace[] = [];
   @property({ attribute: false }) selected?: Workspace;
+  @property({ type: Boolean, reflect: true }) collapsible = false;
+  @property({ type: Boolean, reflect: true }) collapsed = false;
   @property({ attribute: false }) workspaceLabelItems: (workspace: Workspace) => WorkspaceLabelItem[] = () => [];
   @property({ attribute: false }) onSelect?: (workspace: Workspace) => void;
+  @property({ attribute: false }) onToggleCollapsed?: () => void;
 
   protected override updated(changed: PropertyValues<this>): void {
-    if (changed.has("selected") || changed.has("workspaces")) this.scrollSelectedIntoView();
+    if ((changed.has("selected") || changed.has("workspaces") || changed.has("collapsed")) && !this.collapsed) this.scrollSelectedIntoView();
   }
 
   override render() {
     return html`
       <section>
-        <h2>Workspaces</h2>
-        ${this.workspaces.map((workspace) => {
+        <h2>${this.renderHeading()}</h2>
+        ${this.collapsed ? null : this.workspaces.map((workspace) => {
           const label = `${workspace.label}${workspace.isMain ? " · main" : ""}`;
           return html`
             <div
@@ -43,6 +46,11 @@ export class WorkspaceList extends LitElement {
         })}
       </section>
     `;
+  }
+
+  private renderHeading() {
+    if (!this.collapsible) return "Workspaces";
+    return html`<button class="section-toggle" aria-expanded=${String(!this.collapsed)} @click=${() => { this.onToggleCollapsed?.(); }}><span>${this.collapsed ? "▸" : "▾"} Workspaces</span><small>${this.workspaces.length}</small></button>`;
   }
 
   private scrollSelectedIntoView(): void {

@@ -8,8 +8,11 @@ import { listStyles } from "./shared";
 export class ProjectList extends LitElement {
   @property({ attribute: false }) projects: Project[] = [];
   @property({ attribute: false }) selected?: Project;
+  @property({ type: Boolean, reflect: true }) collapsible = false;
+  @property({ type: Boolean, reflect: true }) collapsed = false;
   @property({ attribute: false }) onSelect?: (project: Project) => void;
   @property({ attribute: false }) onClose?: (project: Project) => void;
+  @property({ attribute: false }) onToggleCollapsed?: () => void;
   @state() private openMenuProjectId: string | undefined;
   @state() private menuStyle = "";
   private readonly onDocumentClick = (event: MouseEvent) => {
@@ -29,13 +32,14 @@ export class ProjectList extends LitElement {
 
   protected override updated(changed: PropertyValues<this>): void {
     if (changed.has("projects") && this.openMenuProjectId !== undefined && !this.projects.some((project) => project.id === this.openMenuProjectId)) this.openMenuProjectId = undefined;
+    if (changed.has("collapsed") && this.collapsed) this.openMenuProjectId = undefined;
   }
 
   override render() {
     return html`
       <section>
-        <h2>Projects</h2>
-        ${this.projects.map((project) => html`
+        <h2>${this.renderHeading()}</h2>
+        ${this.collapsed ? null : this.projects.map((project) => html`
           <div
             class=${`action-row ${this.selected?.id === project.id ? "selected" : ""}`}
             tabindex="0"
@@ -58,6 +62,11 @@ export class ProjectList extends LitElement {
         `)}
       </section>
     `;
+  }
+
+  private renderHeading() {
+    if (!this.collapsible) return "Projects";
+    return html`<button class="section-toggle" aria-expanded=${String(!this.collapsed)} @click=${() => { this.onToggleCollapsed?.(); }}><span>${this.collapsed ? "▸" : "▾"} Projects</span><small>${this.projects.length}</small></button>`;
   }
 
   private toggleMenu(projectId: string, target: EventTarget | null) {

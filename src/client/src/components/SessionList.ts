@@ -23,8 +23,11 @@ export class SessionList extends LitElement {
   @property({ attribute: false }) activities: Record<string, SessionActivity> = {};
   @property({ attribute: false }) selected?: SessionInfo;
   @property({ type: Boolean }) canStart = false;
+  @property({ type: Boolean, reflect: true }) collapsible = false;
+  @property({ type: Boolean, reflect: true }) collapsed = false;
   @property({ attribute: false }) onSelect?: (session: SessionInfo) => void;
   @property({ attribute: false }) onStart?: () => void;
+  @property({ attribute: false }) onToggleCollapsed?: () => void;
   @state() private openMenuSessionId: string | undefined;
   @state() private menuStyle = "";
   @state() private archivedExpanded = false;
@@ -49,13 +52,14 @@ export class SessionList extends LitElement {
 
   protected override updated(changed: PropertyValues<this>): void {
     if (changed.has("sessions") && this.openMenuSessionId !== undefined && !this.sessions.some((session) => session.id === this.openMenuSessionId)) this.openMenuSessionId = undefined;
+    if (changed.has("collapsed") && this.collapsed) this.openMenuSessionId = undefined;
     if (changed.has("sessions") && !this.sessions.some((session) => session.archived === true)) this.archivedExpanded = false;
     if (this.selected?.archived === true && !this.archivedExpanded) {
       this.archivedExpanded = true;
       void this.updateComplete.then(() => { this.scrollSelectedIntoView(); });
       return;
     }
-    if (changed.has("selected") || changed.has("sessions")) this.scrollSelectedIntoView();
+    if ((changed.has("selected") || changed.has("sessions") || changed.has("collapsed")) && !this.collapsed) this.scrollSelectedIntoView();
   }
 
   override render() {
@@ -64,13 +68,23 @@ export class SessionList extends LitElement {
     const archivedRows = sessionRows(this.sessions.filter((session) => session.archived === true && !activeIds.has(session.id)));
     return html`
       <section>
-        <h2>Sessions <button ?disabled=${!this.canStart} @click=${() => this.onStart?.()}>+</button></h2>
-        ${activeRows.map((row) => this.renderSession(row))}
-        ${archivedRows.length > 0 ? html`
+        ${this.renderHeading(activeRows.length + archivedRows.length)}
+        ${this.collapsed ? null : activeRows.map((row) => this.renderSession(row))}
+        ${this.collapsed ? null : archivedRows.length > 0 ? html`
           <h2 class="subheading"><button class="section-toggle" aria-expanded=${String(this.archivedExpanded)} @click=${() => { this.toggleArchived(); }}><span>${this.archivedExpanded ? "▾" : "▸"} Archived</span><small>${archivedRows.length}</small></button></h2>
           ${this.archivedExpanded ? archivedRows.map((row) => this.renderSession(row)) : null}
         ` : null}
       </section>
+    `;
+  }
+
+  private renderHeading(sessionCount: number) {
+    if (!this.collapsible) return html`<h2>Sessions <button ?disabled=${!this.canStart} @click=${() => this.onStart?.()}>+</button></h2>`;
+    return html`
+      <h2>
+        <button class="section-toggle" aria-expanded=${String(!this.collapsed)} @click=${() => { this.onToggleCollapsed?.(); }}><span>${this.collapsed ? "▸" : "▾"} Sessions</span><small>${sessionCount}</small></button>
+        <button ?disabled=${!this.canStart} @click=${(event: MouseEvent) => { event.stopPropagation(); this.onStart?.(); }}>+</button>
+      </h2>
     `;
   }
 

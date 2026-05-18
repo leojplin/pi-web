@@ -62,6 +62,12 @@ export const appStyles = css`
     main.navigation-view chat-view, main.navigation-view prompt-editor, main.navigation-view status-bar,
     main.navigation-view .empty { display: none; }
     main.navigation-view .mobile-navigation-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+    main.navigation-view .mobile-navigation-panel project-list,
+    main.navigation-view .mobile-navigation-panel workspace-list,
+    main.navigation-view .mobile-navigation-panel session-list { flex: 1 1 auto; max-height: none; min-height: 0; overflow: auto; }
+    main.navigation-view .mobile-navigation-panel project-list[collapsed],
+    main.navigation-view .mobile-navigation-panel workspace-list[collapsed],
+    main.navigation-view .mobile-navigation-panel session-list[collapsed] { flex: 0 0 auto; min-height: auto; overflow: hidden; }
   }
   status-bar { flex: 0 0 auto; }
   chat-view { flex: 1 1 auto; min-height: 0; overflow: hidden; }
@@ -110,12 +116,14 @@ export const workspacePanelStyles = css`
 
 export const listStyles = css`
   :host { display: block; color: #e6edf3; font: 14px system-ui, sans-serif; }
+  :host([collapsed]) { flex: 0 0 auto; min-height: auto; overflow: hidden; }
   section { padding: 10px; }
-  h2 { display: flex; justify-content: space-between; align-items: center; margin: 0 0 8px; color: #8b949e; font-size: 12px; text-transform: uppercase; }
+  h2 { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 0 0 8px; color: #8b949e; font-size: 12px; text-transform: uppercase; }
   button { border: 1px solid #30363d; border-radius: 8px; background: #161b22; color: #e6edf3; padding: 7px 9px; cursor: pointer; }
   section > button { display: block; width: 100%; text-align: left; margin: 6px 0; }
   .subheading { margin-top: 14px; }
-  .section-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; border: 0; background: transparent; color: inherit; padding: 0; font: inherit; text-transform: inherit; }
+  .section-toggle { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; justify-content: space-between; gap: 8px; width: 100%; border: 0; background: transparent; color: inherit; padding: 0; font: inherit; text-transform: inherit; }
+  .section-toggle span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .section-toggle small { display: inline; color: inherit; font-size: inherit; }
   .action-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; margin: 6px 0; cursor: pointer; }
   .action-row:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; border-radius: 8px; }

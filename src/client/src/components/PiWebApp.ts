@@ -32,6 +32,8 @@ import "./ProjectDialog";
 import "./WorkspacePanel";
 import { appStyles } from "./shared";
 
+type NavigationSection = "projects" | "workspaces" | "sessions";
+
 @customElement("pi-web-app")
 export class PiWebApp extends LitElement {
   @state() private state: AppState = initialAppState();
@@ -76,6 +78,7 @@ export class PiWebApp extends LitElement {
   private terminalAutoStartWorkspaceId: string | undefined;
   private readonly plugins = createPluginRegistry();
   @state() private isMobileNavigationLayout = this.mobileNavigationMedia?.matches ?? false;
+  @state() private expandedMobileNavigationSection: NavigationSection | "none" | undefined;
   private readonly onPopState = () => void this.withChatScrollTransition(() => this.restoreRoute(false));
   private readonly onFocus = () => { void this.sessions.refreshSelectedSession(); };
   private readonly onVisibilityChange = () => {
@@ -274,10 +277,71 @@ export class PiWebApp extends LitElement {
         <strong>Pi Web</strong>
         <button title="Show Actions" aria-label="Show Actions" @click=${() => { this.setState({ actionPaletteOpen: true }); }}>Actions</button>
       </header>
-      <project-list .projects=${this.state.projects} .selected=${this.state.selectedProject} .onSelect=${(project: Project) => this.withChatScrollTransition(() => this.workspaces.selectProject(project))} .onClose=${(project: Project) => this.projects.closeProject(project.id)}></project-list>
-      <workspace-list .workspaces=${this.state.workspaces} .selected=${this.state.selectedWorkspace} .workspaceLabelItems=${(workspace: Workspace) => this.plugins.getWorkspaceLabelItems(this.state, workspace)} .onSelect=${(workspace: Workspace) => this.withChatScrollTransition(() => this.workspaces.selectWorkspace(workspace))}></workspace-list>
-      <session-list .sessions=${this.state.sessions} .statuses=${this.state.sessionStatuses} .activities=${this.state.sessionActivities} .selected=${this.state.selectedSession} .canStart=${!!this.state.selectedWorkspace} .onStart=${() => openChatAfter(() => this.sessions.startSession())} .onSelect=${(session: SessionInfo) => openChatAfter(() => this.sessions.selectSession(session))} .onArchive=${(session: SessionInfo) => this.sessions.archiveSession(session)} .onRestore=${(session: SessionInfo) => openChatAfter(() => this.sessions.restoreSession(session))} .onDelete=${(session: SessionInfo) => this.sessions.deleteCachedNewSession(session)} .onDetachParent=${(session: SessionInfo) => this.sessions.detachParent(session)}></session-list>
+      <project-list
+        .projects=${this.state.projects}
+        .selected=${this.state.selectedProject}
+        .collapsible=${this.isMobileNavigationLayout}
+        .collapsed=${this.isNavigationSectionCollapsed("projects")}
+        .onToggleCollapsed=${() => { this.toggleNavigationSection("projects"); }}
+        .onSelect=${(project: Project) => this.withChatScrollTransition(async () => {
+          this.expandNavigationSection("workspaces");
+          await this.workspaces.selectProject(project);
+        })}
+        .onClose=${(project: Project) => this.projects.closeProject(project.id)}
+      ></project-list>
+      <workspace-list
+        .workspaces=${this.state.workspaces}
+        .selected=${this.state.selectedWorkspace}
+        .collapsible=${this.isMobileNavigationLayout}
+        .collapsed=${this.isNavigationSectionCollapsed("workspaces")}
+        .workspaceLabelItems=${(workspace: Workspace) => this.plugins.getWorkspaceLabelItems(this.state, workspace)}
+        .onToggleCollapsed=${() => { this.toggleNavigationSection("workspaces"); }}
+        .onSelect=${(workspace: Workspace) => this.withChatScrollTransition(async () => {
+          this.expandNavigationSection("sessions");
+          await this.workspaces.selectWorkspace(workspace);
+        })}
+      ></workspace-list>
+      <session-list
+        .sessions=${this.state.sessions}
+        .statuses=${this.state.sessionStatuses}
+        .activities=${this.state.sessionActivities}
+        .selected=${this.state.selectedSession}
+        .canStart=${!!this.state.selectedWorkspace}
+        .collapsible=${this.isMobileNavigationLayout}
+        .collapsed=${this.isNavigationSectionCollapsed("sessions")}
+        .onToggleCollapsed=${() => { this.toggleNavigationSection("sessions"); }}
+        .onStart=${() => openChatAfter(() => this.sessions.startSession())}
+        .onSelect=${(session: SessionInfo) => openChatAfter(() => this.sessions.selectSession(session))}
+        .onArchive=${(session: SessionInfo) => this.sessions.archiveSession(session)}
+        .onRestore=${(session: SessionInfo) => openChatAfter(() => this.sessions.restoreSession(session))}
+        .onDelete=${(session: SessionInfo) => this.sessions.deleteCachedNewSession(session)}
+        .onDetachParent=${(session: SessionInfo) => this.sessions.detachParent(session)}
+      ></session-list>
     `;
+  }
+
+  private expandedNavigationSection(): NavigationSection | undefined {
+    if (this.expandedMobileNavigationSection === "none") return undefined;
+    return this.expandedMobileNavigationSection ?? this.defaultNavigationSection();
+  }
+
+  private defaultNavigationSection(): NavigationSection {
+    if (this.state.selectedProject === undefined) return "projects";
+    if (this.state.selectedWorkspace === undefined) return "workspaces";
+    return "sessions";
+  }
+
+  private isNavigationSectionCollapsed(section: NavigationSection): boolean {
+    return this.isMobileNavigationLayout && this.expandedNavigationSection() !== section;
+  }
+
+  private toggleNavigationSection(section: NavigationSection): void {
+    if (!this.isMobileNavigationLayout) return;
+    this.expandedMobileNavigationSection = this.expandedNavigationSection() === section ? "none" : section;
+  }
+
+  private expandNavigationSection(section: NavigationSection): void {
+    if (this.isMobileNavigationLayout) this.expandedMobileNavigationSection = section;
   }
 
   private visibleWorkspacePanels(): QualifiedWorkspacePanelContribution[] {
