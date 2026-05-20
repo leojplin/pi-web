@@ -334,7 +334,7 @@ interface PluginRuntimeContext {
   configureAuth: () => void | Promise<void>;
   logoutAuth: () => void | Promise<void>;
   selectWorkspaceTool: (tool: QualifiedContributionId) => void;
-  openTerminal?: (options?: { terminalId?: string }) => void;
+  openTerminal: (options?: { terminalId?: string }) => void;
   refreshFiles: () => void | Promise<void>;
   refreshGit: () => void | Promise<void>;
   startSession: () => void | Promise<void>;
@@ -397,11 +397,11 @@ interface WorkspacePanelContribution {
 
 interface WorkspacePanelContext {
   workspace: Workspace;
-  openTerminal?: (options?: { terminalId?: string }) => void;
+  openTerminal: (options?: { terminalId?: string }) => void;
 }
 ```
 
-`workspace` and `openTerminal()` are documented as stable for panel callbacks. Other fields may exist at runtime, but they are Pi Web internals and can change quickly. Use `openTerminal?.({ terminalId })` when a panel creates a terminal and wants Pi Web to navigate to that specific terminal. If a panel needs file, git, or session data, prefer explicit `fetch()` calls and keep them isolated.
+`workspace` and `openTerminal()` are documented as stable for panel callbacks. Other fields may exist at runtime, but they are Pi Web internals and can change quickly. Use `openTerminal({ terminalId })` when a panel creates a terminal and wants Pi Web to navigate to that specific terminal. If a panel needs file, git, or session data, prefer explicit `fetch()` calls and keep them isolated.
 
 Useful workspace shape:
 

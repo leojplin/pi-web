@@ -1,6 +1,5 @@
 import type { Workspace } from "@jmfederico/pi-web/plugin-api";
 
-export const terminalToolId = "core:workspace.terminal";
 export const actionTerminalCols = 120;
 export const actionTerminalRows = 32;
 

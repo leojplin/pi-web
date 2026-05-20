@@ -1,7 +1,6 @@
 import { LitElement, html, type TemplateResult } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
-import type { FileContentResponse, FileTreeEntry, GitDiffResponse, GitStatusResponse, Workspace } from "../api";
-import type { AppState } from "../appState";
+import type { Workspace } from "../api";
 import type { QualifiedContributionId, QualifiedWorkspacePanelContribution, WorkspaceLabelItem, WorkspacePanelContext } from "../plugins/types";
 import { workspacePanelStyles } from "./shared";
 import { renderWorkspaceLabel } from "./workspaceLabel";
@@ -9,32 +8,12 @@ import { renderWorkspaceLabel } from "./workspaceLabel";
 @customElement("workspace-panel")
 export class WorkspacePanel extends LitElement {
   @property({ attribute: false }) workspace: Workspace | undefined;
-  @property({ attribute: false }) appState!: AppState;
+  @property({ attribute: false }) panelContext: WorkspacePanelContext | undefined;
   @property() tool: QualifiedContributionId = "core:workspace.files";
   @property({ attribute: false }) panels: QualifiedWorkspacePanelContribution[] = [];
   @property({ attribute: false }) workspaceLabelItems: WorkspaceLabelItem[] = [];
   @property({ type: Boolean }) hideToolTabs = false;
-  @property({ attribute: false }) fileTree: FileTreeEntry[] = [];
-  @property({ attribute: false }) expandedDirs: Record<string, FileTreeEntry[]> = {};
-  @property({ attribute: false }) selectedFilePath: string | undefined;
-  @property({ attribute: false }) selectedFileContent: FileContentResponse | undefined;
-  @property({ type: Boolean }) fileTreeStale = false;
-  @property({ attribute: false }) gitStatus: GitStatusResponse | undefined;
-  @property({ attribute: false }) selectedDiffPath: string | undefined;
-  @property({ attribute: false }) selectedDiff: GitDiffResponse | undefined;
-  @property({ attribute: false }) selectedStagedDiff: GitDiffResponse | undefined;
-  @property({ type: Boolean }) gitStale = false;
   @property({ attribute: false }) onSelectTool: (tool: QualifiedContributionId) => void = () => undefined;
-  @property({ attribute: false }) onRefreshFiles: () => void = () => undefined;
-  @property({ attribute: false }) onExpandDir: (path: string) => void = () => undefined;
-  @property({ attribute: false }) onSelectFile: (path: string) => void = () => undefined;
-  @property({ attribute: false }) onRefreshGit: () => void = () => undefined;
-  @property({ attribute: false }) onSelectDiff: (path: string) => void = () => undefined;
-  @property({ type: Number }) activeTerminalCount = 0;
-  @property({ attribute: false }) selectedTerminalId: string | undefined;
-  @property({ type: Boolean }) terminalAutoStart = false;
-  @property({ attribute: false }) openTerminal: (options?: { terminalId?: string | undefined }) => void = () => undefined;
-  @property({ attribute: false }) onSelectTerminal: (terminalId: string | undefined, options?: { replace?: boolean | undefined }) => void = () => undefined;
   @query(".workspace-header-strip") private workspaceHeaderStrip?: HTMLElement | null;
   @state() private workspaceHeaderCanScrollLeft = false;
   @state() private workspaceHeaderCanScrollRight = false;
@@ -65,9 +44,10 @@ export class WorkspacePanel extends LitElement {
   override render() {
     const workspace = this.workspace;
     if (workspace === undefined) return html`<section class="empty">Select a workspace.</section>`;
+    const context = this.panelContext;
+    if (context === undefined) return html`<section class="empty">Workspace panel unavailable.</section>`;
     const visiblePanels = this.panels;
     const selectedPanel = visiblePanels.find((panel) => panel.id === this.tool) ?? visiblePanels[0];
-    const context = this.createPanelContext(workspace);
     return html`
       <header>
         <div class=${this.workspaceHeaderFrameClass()}>
@@ -126,33 +106,6 @@ export class WorkspacePanel extends LitElement {
   private workspaceHeaderStripElement(): HTMLElement | undefined {
     const strip = this.workspaceHeaderStrip;
     return strip instanceof HTMLElement ? strip : undefined;
-  }
-
-  private createPanelContext(workspace: Workspace): WorkspacePanelContext {
-    return {
-      workspace,
-      state: this.appState,
-      fileTree: this.fileTree,
-      expandedDirs: this.expandedDirs,
-      selectedFilePath: this.selectedFilePath,
-      selectedFileContent: this.selectedFileContent,
-      fileTreeStale: this.fileTreeStale,
-      gitStatus: this.gitStatus,
-      selectedDiffPath: this.selectedDiffPath,
-      selectedDiff: this.selectedDiff,
-      selectedStagedDiff: this.selectedStagedDiff,
-      gitStale: this.gitStale,
-      activeTerminalCount: this.activeTerminalCount,
-      selectedTerminalId: this.selectedTerminalId,
-      terminalAutoStart: this.terminalAutoStart,
-      openTerminal: this.openTerminal,
-      onRefreshFiles: this.onRefreshFiles,
-      onExpandDir: this.onExpandDir,
-      onSelectFile: this.onSelectFile,
-      onRefreshGit: this.onRefreshGit,
-      onSelectDiff: this.onSelectDiff,
-      onSelectTerminal: this.onSelectTerminal,
-    };
   }
 
   static override styles = workspacePanelStyles;

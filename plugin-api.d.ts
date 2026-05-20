@@ -47,7 +47,7 @@ export interface PluginRuntimeContext {
   openThemePicker: () => void;
   selectMainView: (view: string) => void;
   selectWorkspaceTool: (tool: QualifiedContributionId) => void;
-  openTerminal?: (options?: { terminalId?: string | undefined }) => void;
+  openTerminal: (options?: { terminalId?: string | undefined }) => void;
   refreshFiles: () => void | Promise<void>;
   refreshGit: () => void | Promise<void>;
   startSession: () => void | Promise<void>;
@@ -79,7 +79,7 @@ export interface Workspace {
 export interface WorkspacePanelContext {
   workspace: Workspace;
   state?: PluginRuntimeState;
-  openTerminal?: (options?: { terminalId?: string | undefined }) => void;
+  openTerminal: (options?: { terminalId?: string | undefined }) => void;
 }
 
 export interface WorkspacePanelContribution {

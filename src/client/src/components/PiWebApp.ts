@@ -414,8 +414,10 @@ export class PiWebApp extends LitElement {
   }
 
   private renderWorkspacePanel() {
-    const workspaceLabelItems = this.state.selectedWorkspace === undefined ? [] : this.plugins.getWorkspaceLabelItems(this.state, this.state.selectedWorkspace);
-    return html`<workspace-panel .workspace=${this.state.selectedWorkspace} .appState=${this.state} .tool=${this.state.workspaceTool} .panels=${this.visibleWorkspacePanels()} .workspaceLabelItems=${workspaceLabelItems} .fileTree=${this.state.fileTree} .expandedDirs=${this.state.expandedDirs} .selectedFilePath=${this.state.selectedFilePath} .selectedFileContent=${this.state.selectedFileContent} .fileTreeStale=${this.state.fileTreeStale} .gitStatus=${this.state.gitStatus} .selectedDiffPath=${this.state.selectedDiffPath} .selectedDiff=${this.state.selectedDiff} .selectedStagedDiff=${this.state.selectedStagedDiff} .gitStale=${this.state.gitStale} .activeTerminalCount=${this.state.activeTerminalCount} .selectedTerminalId=${this.state.selectedTerminalId} .terminalAutoStart=${this.terminalAutoStartWorkspaceId === this.state.selectedWorkspace?.id} .openTerminal=${(options?: { terminalId?: string | undefined }) => { this.openTerminal(options); }} .onSelectTool=${(tool: QualifiedContributionId) => { this.openWorkspaceTool(tool); }} .onRefreshFiles=${() => this.files.refreshFiles()} .onExpandDir=${(path: string) => this.files.expandDir(path)} .onSelectFile=${(path: string) => this.files.selectFile(path)} .onRefreshGit=${() => this.git.refreshGit()} .onSelectDiff=${(path: string) => this.git.selectDiff(path)} .onSelectTerminal=${(terminalId: string | undefined, options?: { replace?: boolean | undefined }) => { this.selectTerminal(terminalId, options); }}></workspace-panel>`;
+    const workspace = this.state.selectedWorkspace;
+    const panelContext = workspace === undefined ? undefined : this.createWorkspacePanelContext(workspace);
+    const workspaceLabelItems = workspace === undefined ? [] : this.plugins.getWorkspaceLabelItems(this.state, workspace);
+    return html`<workspace-panel .workspace=${workspace} .panelContext=${panelContext} .tool=${this.state.workspaceTool} .panels=${this.visibleWorkspacePanels()} .workspaceLabelItems=${workspaceLabelItems} .onSelectTool=${(tool: QualifiedContributionId) => { this.openWorkspaceTool(tool); }}></workspace-panel>`;
   }
 
   private renderNavigationPanel(autoSwitchToChat: boolean) {

@@ -52,6 +52,40 @@ export type AuthDialogState =
   | { step: "oauth"; flow: OAuthFlowState; responding?: boolean; inputValue?: string; error?: string }
   | { step: "logout"; providers: AuthProviderOption[] };
 
+export type WorkspaceScopedStateReset = Pick<AppState,
+  | "sessions"
+  | "fileTree"
+  | "expandedDirs"
+  | "selectedFilePath"
+  | "selectedFileContent"
+  | "fileTreeStale"
+  | "gitStatus"
+  | "selectedDiffPath"
+  | "selectedDiff"
+  | "selectedStagedDiff"
+  | "gitStale"
+  | "selectedTerminalId"
+  | "error"
+>;
+
+export function resetWorkspaceScopedState(): WorkspaceScopedStateReset {
+  return {
+    sessions: [],
+    fileTree: [],
+    expandedDirs: {},
+    selectedFilePath: undefined,
+    selectedFileContent: undefined,
+    fileTreeStale: false,
+    gitStatus: undefined,
+    selectedDiffPath: undefined,
+    selectedDiff: undefined,
+    selectedStagedDiff: undefined,
+    gitStale: false,
+    selectedTerminalId: undefined,
+    error: "",
+  };
+}
+
 export function initialAppState(): AppState {
   return {
     projects: [],

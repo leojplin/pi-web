@@ -2,7 +2,7 @@
 
 Configurable workspace actions for Pi Web.
 
-The plugin adds an **Actions** workspace tab. Actions create a new Pi Web terminal, send the configured shell command, and switch to the Terminal tab so the user can monitor progress or take over.
+The plugin adds an **Actions** workspace tab. Actions create a new Pi Web terminal, send the configured shell command, and switch to that terminal so the user can monitor progress or take over.
 
 ## Configuration
 

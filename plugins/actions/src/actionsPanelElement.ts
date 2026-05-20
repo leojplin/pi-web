@@ -1,7 +1,7 @@
 import type { Workspace } from "@jmfederico/pi-web/plugin-api";
 import { ACTIONS_CONFIG_PATH, type WorkspaceAction } from "./config.js";
 import { createWorkspaceTerminal, sendTerminalCommand } from "./terminalDispatcher.js";
-import { openTerminalPanel, requestPiWebRender } from "./piWebPrivateUi.js";
+import { requestPiWebRender } from "./piWebPrivateUi.js";
 import { loadWorkspaceActionsConfig, type WorkspaceActionsConfigLoadResult } from "./workspaceActionsClient.js";
 
 export const actionsPanelTagName = "pi-web-actions-panel";
@@ -94,7 +94,7 @@ class PiWebActionsPanel extends HTMLElement {
     }
 
     this.root.querySelector("button[data-open-terminal]")?.addEventListener("click", () => {
-      this.openWorkspaceTerminal(workspace);
+      this.openWorkspaceTerminal();
     });
   }
 
@@ -103,7 +103,7 @@ class PiWebActionsPanel extends HTMLElement {
     if (state.kind === "unavailable") return `${renderUnavailableState(state)}${this.renderStatus()}`;
     if (state.config.actions.length === 0) return `<p class="muted">No actions configured in ${escapeHtml(ACTIONS_CONFIG_PATH)}.</p>${this.renderStatus()}`;
     return `
-      <p class="muted">Actions create a new workspace terminal, send the command, then switch to the Terminal tab. Edit ${escapeHtml(ACTIONS_CONFIG_PATH)} and click Refresh to reload.</p>
+      <p class="muted">Actions create a new workspace terminal, send the command, then switch to that terminal. Edit ${escapeHtml(ACTIONS_CONFIG_PATH)} and click Refresh to reload.</p>
       ${renderActionGroups(state.config.actions, this.runningActionId)}
       ${this.renderStatus()}
     `;
@@ -148,7 +148,7 @@ class PiWebActionsPanel extends HTMLElement {
       };
       this.runningActionId = undefined;
       this.render();
-      this.openWorkspaceTerminal(workspace, terminal.id);
+      this.openWorkspaceTerminal(terminal.id);
     } catch (error) {
       this.runningActionId = undefined;
       this.status = { kind: "error", message: error instanceof Error ? error.message : String(error) };
@@ -156,13 +156,14 @@ class PiWebActionsPanel extends HTMLElement {
     }
   }
 
-  private openWorkspaceTerminal(workspace: Workspace, terminalId?: string): void {
-    if (this.openTerminalValue !== undefined) {
-      if (terminalId === undefined) this.openTerminalValue();
-      else this.openTerminalValue({ terminalId });
+  private openWorkspaceTerminal(terminalId?: string): void {
+    if (this.openTerminalValue === undefined) {
+      this.status = { kind: "error", message: "This Pi Web version does not provide terminal navigation to plugins." };
+      this.render();
       return;
     }
-    openTerminalPanel(workspace, terminalId);
+    if (terminalId === undefined) this.openTerminalValue();
+    else this.openTerminalValue({ terminalId });
   }
 }
 
