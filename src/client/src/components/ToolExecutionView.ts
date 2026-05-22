@@ -72,7 +72,7 @@ export class ToolExecutionView extends LitElement {
           <span>${truncated ? `Showing ${String(visibleLines.length)} of ${String(lines.length)} lines` : "Full diff"}</span>
           <button type="button" @click=${() => { void this.copyDiff(diff); }}>${this.copied ? "Copied" : "Copy diff"}</button>
         </div>
-        <pre class="diff" aria-label=${label}>${visibleLines.map((line) => html`<span class=${diffLineClass(line)}>${line}</span>`)}</pre>
+        <pre class="diff" aria-label=${label}><code class="diff-content">${visibleLines.map((line) => html`<span class=${diffLineClass(line)}>${line}</span>`)}</code></pre>
         ${truncated ? html`
           <button class="show-more" type="button" @click=${() => { this.showFullDiff = true; }}>
             Show all ${String(lines.length)} diff lines
@@ -128,6 +128,7 @@ export class ToolExecutionView extends LitElement {
     button { border: 1px solid var(--pi-border); border-radius: 6px; background: var(--pi-surface); color: var(--pi-text); padding: 3px 7px; font: 12px system-ui, sans-serif; cursor: pointer; }
     button:hover, button:focus { border-color: var(--pi-accent); }
     .diff { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; margin: 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; border: 1px solid var(--pi-border-muted); border-radius: 7px; background: var(--pi-bg); padding: 8px 0; color: var(--pi-muted); font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.45; }
+    .diff-content { display: block; width: max-content; min-width: 100%; }
     .diff span { display: block; min-height: 1.45em; padding: 0 8px; white-space: pre; }
     .diff .context { color: var(--pi-muted); }
     .diff .hunk { color: var(--pi-accent); }
