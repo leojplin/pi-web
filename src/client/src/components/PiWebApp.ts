@@ -21,6 +21,7 @@ import { themePackPlugin } from "../plugins/themes";
 import { loadExternalPlugins } from "../plugins/external";
 import { PluginRegistry } from "../plugins/registry";
 import { queryNamespace, readNamespacedString, setNamespacedQueryKey } from "../namespacedQueryArgs";
+import { createPwaDisplayModeMedia, detectPwaDisplayMode } from "../pwaDisplayMode";
 import { readRoute, writeRoute, type AppRoute } from "../route";
 import "./ProjectList";
 import "./WorkspaceList";
@@ -99,6 +100,7 @@ export class PiWebApp extends LitElement {
   private readonly terminalSelection = new InMemoryTerminalSelectionMemory();
   private readonly mobileNavigationMedia = typeof window !== "undefined" && "matchMedia" in window ? window.matchMedia("(max-width: 760px)") : undefined;
   private readonly systemLightThemeMedia = typeof window !== "undefined" && "matchMedia" in window ? window.matchMedia("(prefers-color-scheme: light)") : undefined;
+  private readonly pwaDisplayModeMedia = createPwaDisplayModeMedia();
   private observedContextItems: HTMLElement | undefined;
   private observedMobileTabs: HTMLElement | undefined;
   private contextItemsResizeObserver: ResizeObserver | undefined;
@@ -113,6 +115,7 @@ export class PiWebApp extends LitElement {
   private suppressNextRefreshClick = false;
   @state() private activeThemeId: QualifiedContributionId = CLASSIC_THEME_ID;
   @state() private isMobileNavigationLayout = this.mobileNavigationMedia?.matches ?? false;
+  @state() private isPwaDisplayMode = detectPwaDisplayMode(this.pwaDisplayModeMedia);
   @state() private isRefreshingApp = false;
   @state() private refreshMenuOpen = false;
   @state() private refreshMenuStyle = "";
@@ -141,6 +144,9 @@ export class PiWebApp extends LitElement {
   };
   private readonly onSystemLightThemeChange = () => {
     if (this.themePreference.auto) this.applyPreferredTheme(false);
+  };
+  private readonly onPwaDisplayModeChange = () => {
+    this.isPwaDisplayMode = detectPwaDisplayMode(this.pwaDisplayModeMedia);
   };
   private readonly onContextScroll = () => {
     this.updateContextScrollState();
@@ -177,6 +183,7 @@ export class PiWebApp extends LitElement {
     window.addEventListener("keydown", this.onKeyDown, GLOBAL_SHORTCUT_LISTENER_OPTIONS);
     this.mobileNavigationMedia?.addEventListener("change", this.onMobileNavigationMediaChange);
     this.systemLightThemeMedia?.addEventListener("change", this.onSystemLightThemeChange);
+    for (const media of this.pwaDisplayModeMedia) media.addEventListener("change", this.onPwaDisplayModeChange);
     this.applyPreferredTheme(false);
     this.connectRealtime();
     this.piWebStatusTimer = window.setInterval(() => { void this.refreshPiWebStatus(); }, PI_WEB_STATUS_REFRESH_MS);
@@ -194,6 +201,7 @@ export class PiWebApp extends LitElement {
     window.removeEventListener("keydown", this.onKeyDown, GLOBAL_SHORTCUT_LISTENER_OPTIONS);
     this.mobileNavigationMedia?.removeEventListener("change", this.onMobileNavigationMediaChange);
     this.systemLightThemeMedia?.removeEventListener("change", this.onSystemLightThemeChange);
+    for (const media of this.pwaDisplayModeMedia) media.removeEventListener("change", this.onPwaDisplayModeChange);
     this.keyboard.reset();
     this.auth.dispose();
     this.sessions.dispose();
@@ -486,7 +494,7 @@ export class PiWebApp extends LitElement {
       <header>
         <strong>PI WEB</strong>
         <div class="header-actions">
-          ${this.isMobileNavigationLayout ? null : this.renderAppRefresh()}
+          ${this.shouldShowAppRefreshInHeader() ? this.renderAppRefresh() : null}
           <button title="Show Actions" aria-label="Show Actions" @click=${() => { this.setState({ actionPaletteOpen: true }); }}>Actions</button>
         </div>
       </header>
@@ -848,6 +856,7 @@ export class PiWebApp extends LitElement {
     const workspace = this.state.selectedWorkspace;
     const session = this.state.selectedSession;
     const projectLabel = projectContextLabel(project);
+    const showRefresh = this.shouldShowAppRefreshInContextBar();
     const workspaceLabel = workspaceContextLabel(workspace);
     const sessionLabel = sessionContextLabel(session);
     return html`
@@ -873,13 +882,25 @@ export class PiWebApp extends LitElement {
             </button>
           </li>
         </ol>
-        <div class="context-actions">${this.isMobileNavigationLayout ? this.renderAppRefresh() : null}</div>
+        ${showRefresh ? html`<div class="context-actions">${this.renderAppRefresh()}</div>` : null}
       </nav>
     `;
   }
 
   private contextBarClass(): string {
-    return `context-bar${this.contextCanScrollLeft ? " can-scroll-left" : ""}${this.contextCanScrollRight ? " can-scroll-right" : ""}`;
+    const classes = ["context-bar"];
+    if (this.shouldShowAppRefreshInContextBar()) classes.push("has-context-actions");
+    if (this.contextCanScrollLeft) classes.push("can-scroll-left");
+    if (this.contextCanScrollRight) classes.push("can-scroll-right");
+    return classes.join(" ");
+  }
+
+  private shouldShowAppRefreshInHeader(): boolean {
+    return this.isPwaDisplayMode && !this.isMobileNavigationLayout;
+  }
+
+  private shouldShowAppRefreshInContextBar(): boolean {
+    return this.isPwaDisplayMode && this.isMobileNavigationLayout;
   }
 
   private mobileTabsFrameClass(): string {

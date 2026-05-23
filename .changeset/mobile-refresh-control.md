@@ -2,4 +2,4 @@
 "@jmfederico/pi-web": patch
 ---
 
-Add mobile and tablet PWA refresh controls plus action palette commands for refreshing app data or reloading the page.
+Add refresh controls when PI WEB is launched as a PWA, with action palette commands for refreshing app data or reloading the page.
