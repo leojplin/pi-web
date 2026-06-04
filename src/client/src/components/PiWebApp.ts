@@ -46,6 +46,8 @@ import "./CommandPicker";
 import "./ActionPalette";
 import "./AuthDialog";
 import "./ProjectDialog";
+import "./MachineDialog";
+import type { MachineDialogSubmit } from "./MachineDialog";
 import "./SettingsDialog";
 import "./WorkspacePanel";
 import type { WorkspacePanelEmptyState } from "./WorkspacePanel";
@@ -949,7 +951,7 @@ export class PiWebApp extends LitElement {
       openActionPalette: () => { this.setState({ actionPaletteOpen: true }); },
       focusPrompt: () => { this.promptEditor?.focusInput(); },
       addProject: () => { this.setState({ projectDialogOpen: true }); },
-      addMachine: () => this.addMachineFromPrompt(),
+      addMachine: () => { this.openMachineDialog(); },
       refreshSelectedMachine: () => this.machines.refreshMachineHealth(),
       removeSelectedMachine: () => this.removeMachine(),
       openSelectedMachine: () => { this.openSelectedMachine(); },
@@ -1082,13 +1084,13 @@ export class PiWebApp extends LitElement {
     }
   }
 
-  private async addMachineFromPrompt(): Promise<void> {
-    const name = window.prompt("Machine name", "Dev Box")?.trim();
-    if (name === undefined || name === "") return;
-    const baseUrl = window.prompt("Remote PI WEB base URL", "http://127.0.0.1:8504")?.trim();
-    if (baseUrl === undefined || baseUrl === "") return;
-    const token = window.prompt("Bearer token (optional)", "")?.trim();
-    await this.machines.addMachine({ name, baseUrl, ...(token === undefined || token === "" ? {} : { token }) });
+  private openMachineDialog(): void {
+    this.setState({ machineDialogOpen: true, error: "" });
+  }
+
+  private async submitMachineDialog(input: MachineDialogSubmit): Promise<void> {
+    const machine = await this.machines.addMachine(input);
+    if (machine !== undefined) this.setState({ machineDialogOpen: false });
   }
 
   private async removeMachine(machine: Machine | undefined = this.state.selectedMachine): Promise<void> {
@@ -1324,6 +1326,7 @@ export class PiWebApp extends LitElement {
         ${this.renderWorkspacePanel()}
         ${state.actionPaletteOpen ? html`<action-palette .actions=${this.getActions()} .onRun=${(action: AppAction) => { this.setState({ actionPaletteOpen: false }); this.runAction(action); }} .onCancel=${() => { this.setState({ actionPaletteOpen: false }); }}></action-palette>` : null}
         ${state.projectDialogOpen ? html`<project-dialog .machineId=${selectedMachineId(state)} .onSubmit=${(path: string, create: boolean) => this.projects.addProject(path, create)} .onCancel=${() => { this.setState({ projectDialogOpen: false }); }}></project-dialog>` : null}
+        ${state.machineDialogOpen ? html`<machine-dialog .error=${state.error} .onSubmit=${(input: MachineDialogSubmit) => this.submitMachineDialog(input)} .onCancel=${() => { this.setState({ machineDialogOpen: false }); }}></machine-dialog>` : null}
         ${state.themeDialog !== undefined ? html`<command-picker title=${state.themeDialog.title} .options=${state.themeDialog.options} .selectedValue=${state.themeDialog.selectedValue} .onPick=${(value: string) => { this.pickTheme(value); }} .onCancel=${() => { this.setState({ themeDialog: undefined }); }}></command-picker>` : null}
         ${this.settingsSection !== undefined ? html`<settings-dialog .section=${this.settingsSection} .actions=${this.getActions()} .onNavigate=${(section: SettingsSection) => { this.navigateSettings(section); }} .onClose=${() => { this.closeSettings(); }} .onConfigSaved=${(config: PiWebConfigValues) => { this.applyClientConfig(config); }}></settings-dialog>` : null}
       </div>

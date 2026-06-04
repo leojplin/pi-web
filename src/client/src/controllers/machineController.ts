@@ -49,14 +49,16 @@ export class MachineController {
     void this.refreshMachineHealth(machine.id);
   }
 
-  async addMachine(input: { name: string; baseUrl: string; token?: string }): Promise<void> {
+  async addMachine(input: { name: string; baseUrl: string; token?: string }): Promise<Machine | undefined> {
     this.setState({ error: "" });
     try {
       const machine = await api.addMachine(input);
       this.setState({ machines: [...this.getState().machines.filter((candidate) => candidate.id !== machine.id), machine] });
       await this.selectMachine(machine);
+      return machine;
     } catch (error) {
       this.setState({ error: String(error) });
+      return undefined;
     }
   }
 

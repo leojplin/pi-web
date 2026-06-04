@@ -36,6 +36,7 @@ export interface AppState {
   authDialog: AuthDialogState | undefined;
   actionPaletteOpen: boolean;
   projectDialogOpen: boolean;
+  machineDialogOpen: boolean;
   workspaceTool: QualifiedContributionId;
   mainView: "navigation" | "chat" | QualifiedContributionId;
   fileTree: FileTreeEntry[];
@@ -130,6 +131,7 @@ export function initialAppState(): AppState {
     authDialog: undefined,
     actionPaletteOpen: false,
     projectDialogOpen: false,
+    machineDialogOpen: false,
     workspaceTool: "core:workspace.files",
     mainView: "chat",
     fileTree: [],
