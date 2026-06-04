@@ -33,7 +33,7 @@ import { readRoute, writeRoute, type AppRoute } from "../route";
 import { readSettingsSection, writeSettingsSection, type SettingsSection } from "../settingsRoute";
 import { applyShortcutPreferences } from "../shortcutPreferences";
 import { createTerminalCommandRunsRuntime } from "../runtime/terminalRuntime";
-import { isWorkspaceDeletionPending, isWorkspaceDeletionRunPending, latestWorkspaceDeletionRuns, pendingWorkspaceDeletionIds, targetWorkspaceIdForRun, workspaceDeletionMetadata, workspaceDeletionRunFilter } from "../workspaceDeletion";
+import { isWorkspaceDeletionPending, isWorkspaceDeletionRunPending, latestWorkspaceDeletionRuns, pendingWorkspaceDeletionIds, targetWorkspaceIdForRun, workspaceDeletionRunFilter } from "../workspaceDeletion";
 import { machineActivityIndicator } from "../workspaceActivity";
 import "./MachineList";
 import "./ProjectList";
@@ -1007,32 +1007,21 @@ export class PiWebApp extends LitElement {
 
     const machineId = selectedMachineId(this.state);
     try {
-      const mainWorkspace = await this.mainWorkspaceForProject(workspace.projectId);
-      if (mainWorkspace === undefined) {
-        this.setState({ error: "Project main workspace not found" });
-        return;
-      }
+      const run = await workspacesApi.deleteWorkspace(workspace.projectId, workspace.id, machineId);
       if (selectedMachineId(this.state) !== machineId) return;
-      const handle = await this.terminalCommandRunsForOrigin("core", machineId).runCommand({
-        workspace: mainWorkspace,
-        title: `Delete workspace: ${label}`,
-        command: `git worktree remove ${shellQuote(workspace.path)}`,
-        open: true,
-        metadata: workspaceDeletionMetadata(workspace),
-      });
-      this.recordWorkspaceDeletionRun(handle.run, machineId);
-      void handle.completed.then((run) => this.handleCompletedWorkspaceDeletionRun(run, machineId)).catch((error: unknown) => {
-        if (selectedMachineId(this.state) === machineId) this.setState({ error: `Workspace deletion failed. See terminal output. ${errorMessage(error)}` });
-      });
+      this.recordWorkspaceDeletionRun(run, machineId);
+      const commandWorkspace = await this.workspaceForCommandRun(run);
+      if (selectedMachineId(this.state) !== machineId) return;
+      if (commandWorkspace !== undefined) void this.openRuntimeTerminal(machineId, commandWorkspace, { terminalId: run.terminalId });
     } catch (error) {
       if (selectedMachineId(this.state) === machineId) this.setState({ error: `Failed to start workspace deletion: ${errorMessage(error)}` });
     }
   }
 
-  private async mainWorkspaceForProject(projectId: string): Promise<Workspace | undefined> {
-    let workspaces = this.state.selectedProject?.id === projectId ? this.state.workspaces : this.state.workspacesByProjectId[projectId];
-    if (workspaces === undefined || workspaces.length === 0) workspaces = await this.workspaces.refreshProjectWorkspaces(projectId);
-    return workspaces.find((workspace) => workspace.isMain) ?? workspaces[0];
+  private async workspaceForCommandRun(run: TerminalCommandRun): Promise<Workspace | undefined> {
+    let workspaces = this.state.selectedProject?.id === run.projectId ? this.state.workspaces : this.state.workspacesByProjectId[run.projectId];
+    if (workspaces === undefined || workspaces.length === 0) workspaces = await this.workspaces.refreshProjectWorkspaces(run.projectId);
+    return workspaces.find((workspace) => workspace.id === run.workspaceId);
   }
 
   private recordWorkspaceDeletionRun(run: TerminalCommandRun, machineId: string): void {
@@ -1411,10 +1400,6 @@ function emptyWorkspaceRouteSurface(): WorkspaceRouteSurface {
 
 function machineScopedKey(machineId: string, value: string): string {
   return JSON.stringify([machineId, value]);
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 function errorMessage(error: unknown): string {

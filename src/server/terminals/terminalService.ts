@@ -48,6 +48,11 @@ export class TerminalService {
       .map(toInfo);
   }
 
+  closeForCwd(cwd: string): void {
+    if (cwd === "") throw new Error("cwd is required");
+    for (const terminal of [...this.terminals.values()].filter((candidate) => candidate.cwd === cwd)) this.close(terminal.id);
+  }
+
   create(options: { cwd: string; name?: string; cols?: number; rows?: number }): TerminalInfo {
     return this.createTerminal({ ...options, shellArgs: [] });
   }

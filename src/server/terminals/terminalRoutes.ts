@@ -7,6 +7,7 @@ import { parseTerminalSize } from "./terminalSize.js";
 export interface TerminalRouteService {
   list(cwd: string): TerminalInfo[];
   create(options: { cwd: string; name?: string; cols?: number; rows?: number }): TerminalInfo;
+  closeForCwd(cwd: string): void;
   close(id: string): void;
   attach(id: string, handlers: { output: (data: string, replay: boolean) => void; exit: (exitCode: number | undefined) => void }): () => void;
   write(id: string, data: string): void;
@@ -27,6 +28,16 @@ export function registerTerminalRoutes(app: FastifyInstance, terminals: Terminal
   app.post<{ Body: { cwd: string; name?: string; cols?: number; rows?: number } }>(`${prefix}/terminals`, (request, reply) => {
     try {
       return terminals.create(request.body);
+    } catch (error) {
+      return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.delete<{ Querystring: { cwd?: string } }>(`${prefix}/terminals`, (request, reply) => {
+    if (request.query.cwd === undefined || request.query.cwd === "") return reply.code(400).send({ error: "cwd query parameter is required" });
+    try {
+      terminals.closeForCwd(request.query.cwd);
+      return { closed: true };
     } catch (error) {
       return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
     }

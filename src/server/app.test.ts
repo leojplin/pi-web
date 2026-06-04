@@ -163,16 +163,20 @@ describe("buildApp", () => {
     remoteClient = fakeRemoteClient({ request });
 
     const createBody = { origin: "core", title: "Build", command: "npm test", metadata: { "pi.operation": "test" } };
+    const deleteWorkspaceResponse = await app.inject({ method: "DELETE", url: `/api/machines/${remote.id}/projects/p1/workspaces/w1` });
     const createResponse = await app.inject({ method: "POST", url: `/api/machines/${remote.id}/projects/p1/workspaces/w1/terminal-command-runs`, payload: createBody });
     const listResponse = await app.inject({ method: "GET", url: `/api/machines/${remote.id}/terminal-command-runs?projectId=p1&statuses=running` });
     const getResponse = await app.inject({ method: "GET", url: `/api/machines/${remote.id}/terminal-command-runs/run1` });
     const cancelResponse = await app.inject({ method: "POST", url: `/api/machines/${remote.id}/terminal-command-runs/run1/cancel` });
+    const closeWorkspaceTerminalsResponse = await app.inject({ method: "DELETE", url: `/api/machines/${remote.id}/projects/p1/workspaces/w1/terminals` });
     const continueResponse = await app.inject({ method: "POST", url: `/api/machines/${remote.id}/projects/p1/workspaces/w1/terminals/t1/continue` });
 
+    expect(deleteWorkspaceResponse.json()).toEqual({ method: "DELETE", path: "/api/projects/p1/workspaces/w1" });
     expect(createResponse.json()).toEqual({ method: "POST", path: "/api/projects/p1/workspaces/w1/terminal-command-runs" });
     expect(listResponse.json()).toEqual({ method: "GET", path: "/api/terminal-command-runs?projectId=p1&statuses=running" });
     expect(getResponse.json()).toEqual({ method: "GET", path: "/api/terminal-command-runs/run1" });
     expect(cancelResponse.json()).toEqual({ method: "POST", path: "/api/terminal-command-runs/run1/cancel" });
+    expect(closeWorkspaceTerminalsResponse.json()).toEqual({ method: "DELETE", path: "/api/projects/p1/workspaces/w1/terminals" });
     expect(continueResponse.json()).toEqual({ method: "POST", path: "/api/projects/p1/workspaces/w1/terminals/t1/continue" });
     expect(request).toHaveBeenCalledWith("POST", "/api/projects/p1/workspaces/w1/terminal-command-runs", createBody);
   });
@@ -237,6 +241,8 @@ describe("buildApp", () => {
       payload: { origin: "core", title: "Build", command: "npm test", metadata: { "pi.operation": "test" } },
     });
 
+    const closeTerminalsResponse = await app.inject({ method: "DELETE", url: `/api/machines/local/projects/${project.id}/workspaces/${workspace.id}/terminals` });
+
     expect(terminalResponse.statusCode).toBe(200);
     expect(terminalResponse.json()).toEqual({
       method: "POST",
@@ -251,6 +257,8 @@ describe("buildApp", () => {
         metadata: { "pi.operation": "test" },
       },
     });
+    expect(closeTerminalsResponse.statusCode).toBe(200);
+    expect(closeTerminalsResponse.json()).toEqual({ method: "DELETE", path: `/terminals?cwd=${encodeURIComponent(projectDir)}` });
     expect(sessionDaemonRequests[1]).toEqual({
       method: "POST",
       path: "/terminal-command-runs",
@@ -264,6 +272,7 @@ describe("buildApp", () => {
         metadata: { "pi.operation": "test" },
       },
     });
+    expect(sessionDaemonRequests[2]).toEqual({ method: "DELETE", path: `/terminals?cwd=${encodeURIComponent(projectDir)}` });
   });
 
   it("serves local projects and workspaces through machine-scoped aliases", async () => {

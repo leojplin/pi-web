@@ -2,6 +2,20 @@ import { describe, expect, it } from "vitest";
 import { TerminalService } from "./terminalService";
 
 describe("TerminalService command runs", () => {
+  it("closes all terminal records for a cwd", () => {
+    const service = new TerminalService();
+    try {
+      const terminal = service.create({ cwd: process.cwd() });
+
+      service.closeForCwd(process.cwd());
+
+      expect(service.get(terminal.id)).toBeUndefined();
+      expect(service.list(process.cwd())).toEqual([]);
+    } finally {
+      service.dispose();
+    }
+  });
+
   it("tracks dedicated terminal command runs through completion", async () => {
     const service = new TerminalService();
     try {
