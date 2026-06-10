@@ -14,6 +14,7 @@ export interface PiWebPluginRegistration {
   plugin: PiWebPlugin;
   machineId?: string;
   sourcePluginId?: PluginId;
+  machineSpecific?: boolean;
 }
 
 export interface PiWebPlugin {
@@ -131,6 +132,11 @@ export interface QualifiedPluginAction extends AppAction {
 
 export interface WorkspacePanelContext extends WorkspaceContext {
   terminal: WorkspacePanelTerminal;
+  /**
+   * @deprecated Runtime-only compatibility alias for pre-v2 plugins. Use `terminal.open()` instead.
+   * This is intentionally not part of the public `@jmfederico/pi-web/plugin-api` declarations.
+   */
+  openTerminal?: (options?: { terminalId?: string | undefined }) => void;
   piWebUnstable?: Pick<PiWebUnstableRuntimeContext, "terminalCommandRuns">;
   fileTree: FileTreeEntry[];
   expandedDirs: Record<string, FileTreeEntry[]>;

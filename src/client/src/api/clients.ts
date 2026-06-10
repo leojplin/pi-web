@@ -8,6 +8,7 @@ import {
   parseAuthProvidersResponse,
   parseClosed,
   parseCommandResult,
+  parseDeleted,
   parseDetached,
   parseFileContentResponse,
   parseFileSuggestion,
@@ -16,12 +17,14 @@ import {
   parseGitStatusResponse,
   parseMachine,
   parseMachineHealth,
+  parseMachineRuntime,
   parseMachinesResponse,
   parseMessagePage,
   parseModelSelectionResponse,
   parseOAuthFlowState,
   parsePiWebConfigResponse,
   parsePiWebPluginsResponse,
+  parsePiWebRuntimeResponse,
   parsePiWebStatusResponse,
   parseProject,
   parseRestored,
@@ -39,8 +42,12 @@ import { machineGitDiffUrl, messageUrl } from "./urls";
 
 const machinePrefix = (machineId = "local") => `/api/machines/${encodeURIComponent(machineId)}`;
 
+function sessionBaseUrl(session: SessionRef, machineId = "local"): string {
+  return `${machinePrefix(machineId)}/sessions/${encodeURIComponent(session.id)}`;
+}
+
 function sessionUrl(session: SessionRef, endpoint: string, machineId = "local"): string {
-  return `${machinePrefix(machineId)}/sessions/${encodeURIComponent(session.id)}/${endpoint}`;
+  return `${sessionBaseUrl(session, machineId)}/${endpoint}`;
 }
 
 function sessionQueryUrl(session: SessionRef, endpoint: string, machineId = "local"): string {
@@ -49,7 +56,8 @@ function sessionQueryUrl(session: SessionRef, endpoint: string, machineId = "loc
 }
 
 export const piWebApi = {
-  piWebStatus: () => request("/api/pi-web/status", parsePiWebStatusResponse),
+  piWebStatus: (machineId = "local") => request(machineId === "local" ? "/api/pi-web/status" : `${machinePrefix(machineId)}/pi-web/status`, parsePiWebStatusResponse),
+  piWebRuntime: () => request("/api/pi-web/runtime", parsePiWebRuntimeResponse),
 };
 
 export const machinesApi = {
@@ -57,6 +65,7 @@ export const machinesApi = {
   addMachine: (input: { name: string; baseUrl: string; token?: string }) => request("/api/machines", parseMachine, { method: "POST", body: JSON.stringify(input) }),
   deleteMachine: (machineId: string) => request(`/api/machines/${encodeURIComponent(machineId)}`, (value) => value, { method: "DELETE" }),
   health: (machineId: string) => request(`/api/machines/${encodeURIComponent(machineId)}/health`, parseMachineHealth),
+  runtime: (machineId: string) => request(`/api/machines/${encodeURIComponent(machineId)}/runtime`, parseMachineRuntime),
 };
 
 export const configApi = {
@@ -107,6 +116,7 @@ export const sessionsApi = {
   archive: (session: SessionRef, machineId = "local") => request(sessionUrl(session, "archive", machineId), parseArchived, { method: "POST", body: JSON.stringify({ cwd: session.cwd }) }),
   archiveWithDescendants: (session: SessionRef, machineId = "local") => request(sessionUrl(session, "archive-tree", machineId), parseArchived, { method: "POST", body: JSON.stringify({ cwd: session.cwd }) }),
   restore: (session: SessionRef, machineId = "local") => request(sessionUrl(session, "restore", machineId), parseRestored, { method: "POST", body: JSON.stringify({ cwd: session.cwd }) }),
+  deleteArchived: (session: SessionRef, machineId = "local") => request(`${sessionBaseUrl(session, machineId)}?${new URLSearchParams({ cwd: session.cwd }).toString()}`, parseDeleted, { method: "DELETE" }),
   detachParent: (session: SessionRef, machineId = "local") => request(sessionUrl(session, "detach-parent", machineId), parseDetached, { method: "POST", body: JSON.stringify({ cwd: session.cwd }) }),
   authProviders: (options?: { mode?: "login" | "logout"; authType?: "oauth" | "api_key"; machineId?: string }) => {
     const params = new URLSearchParams();

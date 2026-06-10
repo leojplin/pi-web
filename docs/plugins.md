@@ -22,7 +22,7 @@ Plugins run as JavaScript in the browser app. Treat them as trusted code:
 - they can render arbitrary Lit templates/custom elements in plugin contribution areas;
 - they should not be installed from untrusted sources.
 
-PI WEB's `/api/...` HTTP and WebSocket endpoints are internal implementation details. Plugin code should not fetch PI WEB API endpoints directly; use the documented context helpers instead.
+PI WEB's `/api/...` HTTP and WebSocket endpoints are internal implementation details. Plugin code should use the documented context helpers instead. Daring plugins can still reach private routes or runtime objects because they run in the browser, but those private surfaces are experimental: they may graduate into stable helpers, change shape, or disappear.
 
 ## What to ask AI to build
 
@@ -131,16 +131,21 @@ Reload the PI WEB browser tab. PI WEB serves plugin modules with an mtime-based 
 
 ## Remote machine plugins
 
-When machine federation is enabled, PI WEB also loads discovered plugins from the selected remote machine. Remote plugins are trusted browser-side code like local plugins, but their contributions are machine-scoped:
+When [machine federation](https://pi-web.dev/machines.html) is enabled, PI WEB also loads discovered plugins from the selected remote machine. Remote plugins are trusted browser-side code like local plugins, but their contributions are machine-scoped:
 
 - actions, workspace panels, and workspace labels only appear while that machine is selected;
 - plugin file and terminal helpers run against that machine;
 - plugin code is loaded best-effort through the current gateway and cached for the browser page lifetime;
-- if the gateway already has an enabled plugin with the same original id, the gateway plugin wins and the remote duplicate stays hidden;
+- if the gateway and remote machine both have an enabled plugin with the same original id, `machineSpecific` metadata decides whether the gateway copy is reused or only the selected machine's copy can appear;
 - remote theme contributions are ignored for now because themes are app-wide;
 - mixed PI WEB versions across federated machines are best-effort and not guaranteed compatible.
 
 Remote plugin enablement is controlled by the remote machine's PI WEB plugin config. To edit or disable a remote machine plugin, open that machine directly or update its config file.
+
+Plugin package metadata may set `machineSpecific: true` when the plugin's meaning is tied to the selected PI WEB machine:
+
+- Omitted or `false`: use the gateway copy when the same plugin id is also present on a remote machine. This is best for portable UI plugins whose helpers already route through the selected machine.
+- `true`: the gateway copy only appears for the local machine. When a remote machine is selected, only that remote machine's copy can appear; if the remote machine does not expose the plugin, the plugin is hidden. This is best for plugins that report machine-local PI WEB status or depend on machine-local plugin code.
 
 For portable plugin assets, prefer URLs relative to the plugin module, for example:
 
@@ -182,10 +187,10 @@ Built-in plugins can be managed from **Settings → Plugins** or with the top-le
 
 ### Updates
 
-**Plugin id:** `updates`  
+**Plugin id:** `updates`
 **What it does:** adds a conditional **Updates** workspace tab with PI WEB update, restart, and installed-service guidance.
 
-Updates is enabled by default. To hide it, disable `updates` in **Settings → Plugins** or set:
+Updates is enabled by default. It declares `machineSpecific: true` so the gateway Updates tab only appears for the local machine; while a remote machine is selected, that remote machine's Updates plugin is used if available. To hide it, disable `updates` in **Settings → Plugins** or set:
 
 ```json
 {
@@ -197,8 +202,8 @@ Updates is enabled by default. To hide it, disable `updates` in **Settings → P
 
 ### Workspace Tasks
 
-**Plugin id:** `workspace-tasks`  
-**Config file:** `.pi-web/tasks.json`  
+**Plugin id:** `workspace-tasks`
+**Config file:** `.pi-web/tasks.json`
 **What it does:** adds a **Tasks** workspace tab for running configured shell commands in dedicated PI WEB terminals.
 
 Workspace Tasks is enabled by default. To hide it, disable `workspace-tasks` in **Settings → Plugins** or set:
@@ -286,7 +291,7 @@ A package can expose one or more PI WEB plugin modules. There is exactly one sup
   "piWeb": {
     "plugins": [
       { "id": "review", "module": "dist/review.js" },
-      { "id": "dashboard", "module": "dist/dashboard.js" }
+      { "id": "dashboard", "module": "dist/dashboard.js", "machineSpecific": true }
     ]
   }
 }
@@ -298,6 +303,7 @@ Rules:
 - Each entry must have an explicit `id` and `module`.
 - `id` must match `^[a-z][a-z0-9.-]*$`.
 - `module` must be a safe relative path inside the plugin package root.
+- `machineSpecific` is optional and must be a boolean; omit it for the default portable gateway behavior.
 - Duplicate plugin ids are not auto-renamed; later duplicates are skipped.
 - Legacy shortcuts such as `piWeb.plugin`, string entries in `piWeb.plugins`, `piWeb.id` fallback ids, and no-`package.json` fallbacks are not supported.
 
@@ -312,13 +318,14 @@ The manifest contains each discovered plugin module:
       "id": "my-plugin",
       "module": "/pi-web-plugins/my-plugin/pi-web-plugin.js?v=1234567890",
       "source": "local",
-      "scope": "local"
+      "scope": "local",
+      "machineSpecific": false
     }
   ]
 }
 ```
 
-`source` describes where the plugin came from (`bundled`, `local`, or the Pi package source). `scope` is `bundled`, `local`, `user`, or `project`.
+`source` describes where the plugin came from (`bundled`, `local`, or the Pi package source). `scope` is `bundled`, `local`, `user`, or `project`. `machineSpecific` controls whether the gateway copy is valid for remote machines or only each selected machine's own copy can appear.
 
 A plugin can fetch its own static assets with URLs under:
 
@@ -450,12 +457,12 @@ interface PluginRuntimeContext {
 Notes:
 
 - `state` is a snapshot of current UI state when actions are built.
-- The stable state fields are `state.selectedWorkspace`, `state.selectedSession`, and `state.piWebStatus`.
-- Other `state` fields may exist at runtime, but they are PI WEB internals and can change quickly.
+- The stable state fields are `state.selectedWorkspace`, `state.selectedSession`, and `state.piWebStatus`. `state.piWebStatus` describes the currently selected machine's PI WEB runtime, or the gateway/local runtime when the local machine is selected.
+- Other `state` fields may exist at runtime, but they are private PI WEB internals that may graduate into stable helpers, change shape, or disappear.
 - `enabled` is evaluated when the action palette asks for actions.
 - `selectWorkspaceTool()` expects a qualified panel id such as `my-plugin:workspace.info`.
 - `openTerminal()` switches to the built-in terminal panel. Pass `{ terminalId }` to deep-link to a specific terminal.
-- Only fields documented here and declared in `plugin-api.d.ts` are stable public plugin API. Unstable runtime fields are intentionally omitted from these types; if a plugin author chooses to depend on them, they must explicitly import unstable types from `@jmfederico/pi-web/plugin-api/unstable` and type-assert the context in their own code.
+- Only fields documented here and declared in `plugin-api.d.ts` are stable public plugin API. Anything else is experimental: it may become public API later, change shape, or disappear.
 
 #### Keyboard shortcuts
 
@@ -533,6 +540,8 @@ interface WorkspacePanelContext {
 `icon` is optional and is used in the compact mobile tab bar. Prefer an SVG rendered with the `svg` helper from `PluginActivationContext`; use `currentColor` so PI WEB themes can style it. If `icon` is omitted, mobile tabs fall back to initials from the panel title, or to the full title when initials collide.
 
 `machine`, `workspace`, `files`, `terminal`, and `host` are documented as stable for panel callbacks. Use `terminal.open()` to switch to the built-in terminal panel; pass `{ terminalId }` to deep-link to a specific terminal. Call `host.requestRender()` when async plugin-owned state changes should make PI WEB re-evaluate panel callbacks such as `badge`, `visible`, or `render`.
+
+For compatibility, PI WEB still provides the old `context.openTerminal()` workspace-panel helper at runtime. It is deprecated, intentionally omitted from the public TypeScript declarations, and planned for removal in v2. Existing JavaScript plugins keep working, while typed plugins should migrate to `context.terminal.open()`.
 
 Useful workspace and machine shapes:
 
@@ -761,22 +770,11 @@ render: ({ terminal }) => html`
 
 Review command strings carefully. They are trusted shell commands executed in the workspace terminal.
 
-## Internal PI WEB APIs and explicit unstable opt-in
+## Private and experimental PI WEB APIs
 
-PI WEB's `/api/...` HTTP and WebSocket routes are private implementation details. Plugin code should not fetch PI WEB API endpoints directly because those URLs, response shapes, and machine-federation routing rules can change.
+PI WEB's `/api/...` HTTP and WebSocket routes and runtime-only fields are private implementation details. They exist because plugins are trusted browser code, and because some capabilities may be evaluated there before they are designed as stable helpers.
 
-If a plugin author deliberately chooses to depend on an unstable runtime field while a public helper is still being designed, make that decision explicit in code with a type-only unstable import and a local type assertion:
-
-```ts
-import type { WorkspacePanelContext } from "@jmfederico/pi-web/plugin-api";
-import type { UnstableWorkspacePanelContext } from "@jmfederico/pi-web/plugin-api/unstable";
-
-function unstableContext(context: WorkspacePanelContext) {
-  return context as WorkspacePanelContext & UnstableWorkspacePanelContext;
-}
-```
-
-Unstable APIs are not covered by the v1 compatibility promise. Prefer documented helpers whenever they exist.
+That is allowed, but outside the v1 compatibility promise: URLs, response shapes, runtime fields, and machine-federation routing may graduate into stable APIs, change shape, or disappear. The stable public plugin API is only the documented helpers and declarations in `plugin-api.d.ts`. Prefer those whenever they exist; if you rely on private surfaces, keep the dependency local to the plugin and expect to revisit it after PI WEB upgrades.
 
 ## Async data and caching
 
@@ -793,7 +791,7 @@ PI WEB does not provide a plugin cache/invalidation framework. Keep host callbac
 If you are an AI agent building or editing a PI WEB plugin, follow this checklist:
 
 1. Create or update a plugin folder with `package.json` and a JavaScript module such as `pi-web-plugin.js`.
-2. Use the single supported package metadata shape: `piWeb.plugins` array with `{ id, module }` entries.
+2. Use the single supported package metadata shape: `piWeb.plugins` array with `{ id, module, machineSpecific? }` entries.
 3. Default-export `{ apiVersion: 1, name, activate }` from the module.
 4. Return `{ contributions: { actions, workspacePanels, workspaceLabels } }` from `activate()`.
 5. Use ids matching `^[a-z][a-z0-9.-]*$`.
@@ -804,7 +802,7 @@ If you are an AI agent building or editing a PI WEB plugin, follow this checklis
 10. Add workspace labels for compact inline metadata.
 11. Return arrays from workspace label `items()`; return an empty array to render nothing.
 12. Use documented context helpers first: `files`, `terminal`, `host.requestRender`, `workspace`, `machine`, `state.selectedWorkspace`, `state.selectedSession`, and `state.piWebStatus`.
-13. Do not fetch PI WEB `/api/...` endpoints directly. If an unstable runtime field is intentionally required, import the type from `@jmfederico/pi-web/plugin-api/unstable` and type-assert locally.
+13. Do not fetch PI WEB `/api/...` endpoints directly unless you intentionally accept private API churn; prefer documented helpers.
 14. Treat plugins as trusted code and avoid reading or displaying secrets unless intentional.
 15. After local edits, tell the user to hard reload the browser and check the console for plugin errors.
 

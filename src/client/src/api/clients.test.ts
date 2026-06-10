@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { PI_WEB_CAPABILITIES } from "../../../shared/capabilities";
 import type { TerminalCommandRun, Workspace } from "../../../shared/apiTypes";
-import { terminalsApi, workspacesApi } from "./clients";
+import { machinesApi, piWebApi, terminalsApi, workspacesApi } from "./clients";
 
 const workspace: Workspace = {
   id: "w/1",
@@ -27,6 +28,36 @@ const commandRun: TerminalCommandRun = {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe("machine-scoped runtime API", () => {
+  it("reads machine PI WEB status through the gateway route", async () => {
+    const fetchMock = stubJsonFetch({
+      packageName: "@jmfederico/pi-web",
+      generatedAt: "now",
+      components: {
+        web: { component: "web", label: "PI WEB", available: true, stale: false },
+        sessiond: { component: "sessiond", label: "PI WEB Session Daemon", available: true, stale: false },
+      },
+      release: { packageName: "@jmfederico/pi-web", updateAvailable: false },
+      commands: {},
+      messages: [],
+    });
+
+    await piWebApi.piWebStatus("remote a");
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchCall(fetchMock, 0)[0]).toBe("/api/machines/remote%20a/pi-web/status");
+  });
+
+  it("reads machine runtime through the gateway route", async () => {
+    const fetchMock = stubJsonFetch({ machineId: "remote a", ok: true, checkedAt: "now", capabilities: [PI_WEB_CAPABILITIES.sessionsDeleteArchived] });
+
+    await machinesApi.runtime("remote a");
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchCall(fetchMock, 0)[0]).toBe("/api/machines/remote%20a/runtime");
+  });
 });
 
 describe("machine-scoped terminal command-run API", () => {

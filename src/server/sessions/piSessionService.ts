@@ -54,7 +54,18 @@ interface QueuedPrompt {
   text: string;
 }
 
-type SessionArchiveRepository = Pick<SessionArchiveStore, "list" | "get" | "archive" | "restore" | "isArchived">;
+function requirePromptText(value: unknown): string {
+  if (typeof value !== "string") throw new Error("Prompt text is required");
+  return value;
+}
+
+function parsePromptStreamingBehavior(value: unknown): QueuedPromptKind | undefined {
+  if (value === undefined) return undefined;
+  if (value === "steer" || value === "followUp") return value;
+  throw new Error('Prompt streamingBehavior must be "steer" or "followUp"');
+}
+
+type SessionArchiveRepository = Pick<SessionArchiveStore, "list" | "get" | "archive" | "restore" | "isArchived"> & { deleteArchived?: (sessionId: string) => Promise<void> };
 
 export type PiSessionRef = ClientSessionRef;
 
@@ -95,6 +106,17 @@ export interface PiSessionManagerGateway {
   open(path: string): PiSessionManager;
 }
 
+interface PiExtensionError {
+  extensionPath: string;
+  event: string;
+  error: string;
+  stack?: string;
+}
+
+interface PiExtensionBindings {
+  onError?: (error: PiExtensionError) => void;
+}
+
 export interface PiAgentSession {
   modelRegistry: ModelRegistryInstance;
   sessionManager: PiSessionManager;
@@ -113,6 +135,7 @@ export interface PiAgentSession {
   promptTemplates: readonly { name: string; description?: string }[];
   resourceLoader: { getSkills(): { skills: readonly { name: string; description?: string }[] } };
   subscribe(listener: (event: unknown) => void): () => void;
+  bindExtensions(bindings: PiExtensionBindings): Promise<void>;
   compact(instructions?: string): Promise<{ summary: string; tokensBefore: number }>;
   getUserMessagesForForking(): readonly { entryId: string; text: string }[];
   getSessionStats(): { sessionId: string; totalMessages: number; userMessages: number; assistantMessages: number; toolCalls: number; tokens: ClientSessionStatus["tokens"]; cost: number };
@@ -377,22 +400,24 @@ export class PiSessionService {
     return commands.sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  async prompt(ref: PiSessionLookup, text: string, streamingBehavior?: "steer" | "followUp"): Promise<void> {
+  async prompt(ref: PiSessionLookup, text: unknown, streamingBehavior?: unknown): Promise<void> {
+    const promptText = requirePromptText(text);
+    const requestedBehavior = parsePromptStreamingBehavior(streamingBehavior);
     await this.assertWritable(ref);
     const session = await this.getOrOpen(ref);
-    this.maybeGenerateSessionName(session, text);
+    this.maybeGenerateSessionName(session, promptText);
     const isQueued = session.isStreaming || session.isCompacting;
-    const behavior = isQueued ? streamingBehavior ?? "followUp" : undefined;
-    if (isQueued && this.hasQueuedMessageText(session, text)) {
+    const behavior = isQueued ? requestedBehavior ?? "followUp" : undefined;
+    if (isQueued && this.hasQueuedMessageText(session, promptText)) {
       this.publishActivity(session, "duplicate queued message ignored", "active");
       this.publishStatus(session);
       return;
     }
     if (session.isCompacting) {
-      this.enqueuePromptDuringCompaction(session, text, behavior ?? "followUp");
+      this.enqueuePromptDuringCompaction(session, promptText, behavior ?? "followUp");
       return;
     }
-    void this.submitPrompt(session, text, behavior);
+    void this.submitPrompt(session, promptText, behavior);
   }
 
   private submitPrompt(session: PiAgentSession, text: string, behavior: QueuedPromptKind | undefined): Promise<void> {
@@ -497,6 +522,16 @@ export class PiSessionService {
     await this.archiveStore.restore(archived.sessionId);
   }
 
+  async deleteArchived(ref: PiSessionLookup): Promise<void> {
+    const record = await this.getArchived(ref);
+    if (record === undefined) throw new Error("Archived session not found");
+    if (this.archiveStore.deleteArchived === undefined) throw new Error("Archive store does not support deletion");
+
+    await this.closeActive(record.sessionId);
+    if (record.archivePath === undefined) await this.ensureArchivedRecordMoved(record);
+    await this.archiveStore.deleteArchived(record.sessionId);
+  }
+
   async detachParent(ref: PiSessionLookup): Promise<void> {
     const session = await this.getOrOpen(ref);
     const sessionFile = session.sessionFile;
@@ -539,6 +574,12 @@ export class PiSessionService {
     } catch {
       return record;
     }
+  }
+
+  private async ensureArchivedRecordMoved(record: ArchivedSessionRecord): Promise<ArchivedSessionRecord> {
+    const session = (await this.sessionManager.list(record.cwd)).find((candidate) => candidate.id === record.sessionId);
+    if (session === undefined) return record;
+    return this.archiveStore.archive(archiveInputFromListEntry(session));
   }
 
   private async archiveInputForSession(session: PiAgentSession): Promise<ArchiveSessionInput> {
@@ -655,15 +696,26 @@ export class PiSessionService {
 
   private async create(sessionManager: PiSessionManager, cwd: string): Promise<ActiveSession<PiSessionRuntime>> {
     const runtime = await this.createAgentRuntime(this.createRuntime, { cwd, agentDir: this.agentDir, sessionManager });
+    await this.bindSessionExtensions(runtime.session);
     const active: ActiveSession<PiSessionRuntime> = { runtime, unsubscribe: noop };
     this.bindRuntime(active);
-    runtime.setRebindSession(() => {
+    runtime.setRebindSession(async (session) => {
+      await this.bindSessionExtensions(session);
       this.bindRuntime(active);
-      return Promise.resolve();
     });
     this.active.set(runtime.session.sessionId, active);
     this.publishStatus(runtime.session);
     return active;
+  }
+
+  private async bindSessionExtensions(session: PiAgentSession): Promise<void> {
+    await session.bindExtensions({
+      onError: (error) => {
+        const message = `${error.extensionPath}: ${error.error}`;
+        this.publishActivity(session, "extension error", "error", message);
+        this.events.publish(session.sessionId, { type: "session.error", message });
+      },
+    });
   }
 
   private bindRuntime(active: ActiveSession<PiSessionRuntime>): void {

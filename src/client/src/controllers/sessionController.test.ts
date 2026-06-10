@@ -3,6 +3,7 @@ import { api as defaultApi, type MessagePage, type SessionActivity, type Session
 import { isCachedNewSessionInfo, loadCachedNewSessions, markCachedNewSessionInfo, rememberCachedNewSession } from "../cachedNewSessions";
 import { initialAppState, type AppState } from "../appState";
 import { machineSessionKey } from "../machineKeys";
+import { PI_WEB_CAPABILITIES } from "../../../shared/capabilities";
 import { loadDraft, saveDraft } from "../promptDraftStorage";
 import { SessionController, type SessionEventSocket } from "./sessionController";
 import { InMemorySessionSelectionMemory } from "./sessionSelection";
@@ -288,6 +289,98 @@ describe("SessionController", () => {
     expect(state.sessions.find((session) => session.id === oldSession.id)).toMatchObject({ archived: true });
     expect(state.sessions.find((session) => session.id === childSession.id)).toMatchObject({ archived: true });
     expect(state.selectedSession?.id).toBe(nextSession.id);
+  });
+
+  it("archives selected sessions in bulk", async () => {
+    const secondSession = { ...oldSession, id: "second-session", path: "/tmp/second-session.jsonl" };
+    const nextSession = { ...oldSession, id: "next-session", path: "/tmp/next-session.jsonl" };
+    const archivedIds: string[] = [];
+    let state: AppState = { ...initialAppState(), selectedWorkspace: workspace, sessions: [oldSession, secondSession, nextSession] };
+    const api: typeof defaultApi = {
+      ...defaultApi,
+      archive: (session) => {
+        archivedIds.push(session.id);
+        return Promise.resolve({ archived: true });
+      },
+      messages: () => Promise.resolve(emptyPage),
+      status: (session) => Promise.resolve(status(session.id)),
+    };
+    const controller = new SessionController(
+      () => state,
+      (patch) => { state = { ...state, ...patch }; },
+      () => undefined,
+      new InMemorySessionSelectionMemory(),
+      { api, socket: new FakeSocket() },
+    );
+
+    await controller.selectSession(oldSession, { updateUrl: false });
+    await controller.archiveSessions([oldSession, secondSession]);
+
+    expect(archivedIds).toEqual([oldSession.id, secondSession.id]);
+    expect(state.sessions.find((session) => session.id === oldSession.id)).toMatchObject({ archived: true });
+    expect(state.sessions.find((session) => session.id === secondSession.id)).toMatchObject({ archived: true });
+    expect(state.selectedSession?.id).toBe(nextSession.id);
+  });
+
+  it("deletes selected archived sessions in bulk and selects the next current session", async () => {
+    const archivedSession = { ...oldSession, archived: true, archivedAt: "later" };
+    const nextSession = { ...oldSession, id: "next-session", path: "/tmp/next-session.jsonl" };
+    const deletedIds: string[] = [];
+    let state: AppState = {
+      ...initialAppState(),
+      selectedWorkspace: workspace,
+      selectedSession: archivedSession,
+      sessions: [archivedSession, nextSession],
+      machineRuntimes: { local: { machineId: "local", ok: true, checkedAt: "now", capabilities: [PI_WEB_CAPABILITIES.sessionsDeleteArchived] } },
+    };
+    const api: typeof defaultApi = {
+      ...defaultApi,
+      deleteArchived: (session) => {
+        deletedIds.push(session.id);
+        return Promise.resolve({ deleted: true });
+      },
+      messages: () => Promise.resolve(emptyPage),
+      status: (session) => Promise.resolve(status(session.id)),
+    };
+    const controller = new SessionController(
+      () => state,
+      (patch) => { state = { ...state, ...patch }; },
+      () => undefined,
+      new InMemorySessionSelectionMemory(),
+      { api, socket: new FakeSocket() },
+    );
+
+    await controller.deleteArchivedSessions([archivedSession]);
+
+    expect(deletedIds).toEqual([archivedSession.id]);
+    expect(state.sessions.map((session) => session.id)).toEqual([nextSession.id]);
+    expect(state.selectedSession?.id).toBe(nextSession.id);
+  });
+
+  it("does not delete archived sessions when the selected machine runtime does not support it", async () => {
+    const archivedSession = { ...oldSession, archived: true, archivedAt: "later" };
+    const deletedIds: string[] = [];
+    let state: AppState = { ...initialAppState(), selectedWorkspace: workspace, sessions: [archivedSession] };
+    const api: typeof defaultApi = {
+      ...defaultApi,
+      deleteArchived: (session) => {
+        deletedIds.push(session.id);
+        return Promise.resolve({ deleted: true });
+      },
+    };
+    const controller = new SessionController(
+      () => state,
+      (patch) => { state = { ...state, ...patch }; },
+      () => undefined,
+      new InMemorySessionSelectionMemory(),
+      { api, socket: new FakeSocket() },
+    );
+
+    await controller.deleteArchivedSessions([archivedSession]);
+
+    expect(deletedIds).toEqual([]);
+    expect(state.sessions).toEqual([archivedSession]);
+    expect(state.error).toContain("requires an updated Pi-Web runtime");
   });
 
   it("forgets archived selections when the archived section collapse clears selection", async () => {

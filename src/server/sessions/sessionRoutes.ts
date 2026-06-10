@@ -13,6 +13,12 @@ interface MessageQuery extends SessionQuery {
 
 class SessionRouteValidationError extends Error {}
 
+interface PromptRequestBody {
+  cwd?: unknown;
+  text?: unknown;
+  streamingBehavior?: unknown;
+}
+
 export function registerSessionRoutes(app: FastifyInstance, sessions: PiSessionService, eventHub: SessionEventHub, prefix = ""): void {
   app.get<{ Querystring: SessionQuery }>(`${prefix}/sessions`, async (request, reply) => {
     if (request.query.cwd === undefined || request.query.cwd === "") return reply.code(400).send({ error: "cwd query parameter is required" });
@@ -106,12 +112,10 @@ export function registerSessionRoutes(app: FastifyInstance, sessions: PiSessionS
     }
   });
 
-  app.post<{ Params: { sessionId: string }; Body: { cwd?: unknown; text?: unknown; streamingBehavior?: "steer" | "followUp" } }>(`${prefix}/sessions/:sessionId/prompt`, async (request, reply) => {
+  app.post<{ Params: { sessionId: string }; Body: PromptRequestBody | undefined }>(`${prefix}/sessions/:sessionId/prompt`, async (request, reply) => {
     try {
       const body = requireRecord(request.body);
-      const streamingBehavior = body["streamingBehavior"];
-      if (streamingBehavior !== undefined && streamingBehavior !== "steer" && streamingBehavior !== "followUp") throw new Error("streamingBehavior must be steer or followUp");
-      await sessions.prompt(sessionRefFromBody(request.params.sessionId, body), requireString(body, "text"), streamingBehavior);
+      await sessions.prompt(sessionRefFromBody(request.params.sessionId, body), body["text"], body["streamingBehavior"]);
       return { accepted: true };
     } catch (error) {
       return reply.code(400).send({ error: errorMessage(error) });
@@ -187,6 +191,15 @@ export function registerSessionRoutes(app: FastifyInstance, sessions: PiSessionS
       return { restored: true };
     } catch (error) {
       return reply.code(400).send({ error: errorMessage(error) });
+    }
+  });
+
+  app.delete<{ Params: { sessionId: string }; Querystring: SessionQuery }>(`${prefix}/sessions/:sessionId`, async (request, reply) => {
+    try {
+      await sessions.deleteArchived(sessionRefFromQuery(request.params.sessionId, request.query));
+      return { deleted: true };
+    } catch (error) {
+      return reply.code(readErrorStatus(error)).send({ error: errorMessage(error) });
     }
   });
 

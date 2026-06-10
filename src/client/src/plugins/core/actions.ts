@@ -18,8 +18,8 @@ export function createCoreActions(): PluginAction[] {
       id: "prompt.focus",
       title: "Focus Prompt",
       description: "Move keyboard focus to the message composer",
+      shortcut: "mod+g c",
       group: "General",
-      enabled: (context) => context.state.selectedSession !== undefined,
       run: (context) => { context.focusPrompt(); },
     },
     {
@@ -88,13 +88,6 @@ export function createCoreActions(): PluginAction[] {
       run: (context) => { context.piWebUnstable?.openSettings?.(); },
     },
     {
-      id: "app.refresh-data",
-      title: "Refresh App Data",
-      description: "Refresh session, status, activity, and the current workspace surface without reloading the page",
-      group: "General",
-      run: (context) => context.refreshAppData(),
-    },
-    {
       id: "app.reload-page",
       title: "Full Page Reload",
       description: "Reload the PI WEB browser page",
@@ -106,7 +99,7 @@ export function createCoreActions(): PluginAction[] {
       title: "Go to Chat",
       shortcut: "mod+1",
       group: "Navigation",
-      run: (context) => { context.selectMainView("chat"); },
+      run: (context) => { context.focusPrompt(); },
     },
     {
       id: "view.files",
