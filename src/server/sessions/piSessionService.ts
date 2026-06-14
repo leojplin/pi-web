@@ -561,8 +561,10 @@ export class PiSessionService {
   }
 
   async reload(ref: PiSessionLookup): Promise<void> {
-    const active = await this.getActive(ref);
-    await this.closeActive(active.runtime.session.sessionId);
+    await this.assertWritable(ref);
+    const session = await this.getOrOpen(ref);
+    if (this.hasActiveWork(session)) throw new Error("Stop current session activity before reloading");
+    await this.closeActive(session.sessionId);
     const reopened = await this.getActive(ref);
     this.publishStatus(reopened.runtime.session);
   }

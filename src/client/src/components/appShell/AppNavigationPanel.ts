@@ -41,6 +41,7 @@ export class AppNavigationPanel extends LitElement {
   @property({ type: Boolean }) sessionsCollapsed = false;
   @property({ type: Boolean }) canStartSession = false;
   @property({ type: Boolean }) canDeleteArchivedSessions = false;
+  @property({ type: Boolean }) canReloadSessions = false;
   @property({ type: String }) archivedDeleteUnavailableMessage = "Update and restart Pi-Web on this machine to delete archived sessions.";
   @property({ attribute: false }) onShowActions?: () => void;
   @property({ attribute: false }) onToggleMachines?: () => void;
@@ -157,6 +158,7 @@ export class AppNavigationPanel extends LitElement {
         .selected=${this.selectedSession}
         .canStart=${this.canStartSession}
         .canDeleteArchived=${this.canDeleteArchivedSessions}
+        .canReload=${this.canReloadSessions}
         .archivedDeleteUnavailableMessage=${this.archivedDeleteUnavailableMessage}
         .collapsible=${this.collapsible}
         .collapsed=${this.sessionsCollapsed}

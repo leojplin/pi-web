@@ -999,6 +999,11 @@ export class PiWebApp extends LitElement {
     return runtime?.ok === true && supportsPiWebCapability(runtime, PI_WEB_CAPABILITIES.sessionsDeleteArchived);
   }
 
+  private canReloadSessions(): boolean {
+    const runtime = this.selectedMachineRuntime();
+    return runtime?.ok === true && supportsPiWebCapability(runtime, PI_WEB_CAPABILITIES.sessionsReload);
+  }
+
   private archivedDeleteUnavailableMessage(): string {
     const machineName = this.state.selectedMachine?.name ?? "this machine";
     return `Update and restart Pi-Web on ${machineName} to delete archived sessions.`;
@@ -1033,6 +1038,7 @@ export class PiWebApp extends LitElement {
         .selectedSession=${this.state.selectedSession}
         .canStartSession=${!!this.state.selectedWorkspace}
         .canDeleteArchivedSessions=${this.canDeleteArchivedSessions()}
+        .canReloadSessions=${this.canReloadSessions()}
         .archivedDeleteUnavailableMessage=${this.archivedDeleteUnavailableMessage()}
         .collapsible=${true}
         .compact=${this.appShell.isMobileNavigationLayout}
