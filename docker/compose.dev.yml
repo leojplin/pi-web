@@ -22,8 +22,8 @@ x-pi-web-dev-volumes: &pi-web-dev-volumes
   - type: volume
     source: node_modules
     target: /workspace/node_modules
-  - type: volume
-    source: data
+  - type: bind
+    source: ${PI_WEB_DOCKER_DATA_DIR:-${HOME}/.local/share/pi-web-docker/data}
     target: /data
   - type: bind
     source: /var/run/docker.sock
@@ -91,5 +91,4 @@ services:
       start_period: 10s
 
 volumes:
-  data:
   node_modules:

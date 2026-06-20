@@ -173,7 +173,7 @@ docker compose exec web hostexec uname -a
 
 ## Development Docker setup
 
-Use this mode when developing PI WEB from this checkout. It bind-mounts the source tree, keeps dependencies and PI WEB data in Docker volumes, and preserves the split runtime model:
+Use this mode when developing PI WEB from this checkout. It bind-mounts the source tree, keeps dependencies in a Docker volume, stores PI WEB/Pi data in the same host data directory as runtime mode by default, and preserves the split runtime model:
 
 - `sessiond` runs `npm run start:sessiond` as the long-lived owner of Pi agent runtimes;
 - `web` runs `npm run dev:web` and `npm run dev:client` so API, plugin, and Vite changes can autoreload without restarting `sessiond`.
@@ -184,8 +184,18 @@ From the repository root:
 export PI_WEB_UID=$(id -u)
 export PI_WEB_GID=$(id -g)
 export DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
+# Optional; this is also the default dev data path.
+export PI_WEB_DOCKER_DATA_DIR=${PI_WEB_DOCKER_DATA_DIR:-$HOME/.local/share/pi-web-docker/data}
+mkdir -p "$PI_WEB_DOCKER_DATA_DIR"
 
 docker compose -f docker/compose.dev.yml up --build
+```
+
+If you already ran the runtime installer, you can reuse its `.env` so dev mode gets the same UID/GID, Docker group, ports, and data directory:
+
+```bash
+docker compose --env-file "$HOME/.local/share/pi-web-docker/.env" \
+  -f docker/compose.dev.yml up --build
 ```
 
 Open the Vite UI at <http://127.0.0.1:8505>. The dev API is published on <http://127.0.0.1:8504>.
@@ -203,6 +213,26 @@ docker compose -f docker/compose.dev.yml down
 Restart `sessiond` manually after changes that affect `src/server/sessiond.ts`, daemon ownership, or session-daemon-only code paths. Restarting only `web` is enough for ordinary API/client/plugin development reloads.
 
 The dev setup intentionally has the same Docker socket and broad host mounts as the runtime setup. The same trust warnings apply.
+
+### Sharing runtime and development state
+
+Runtime and dev mode both use `/data` inside the containers. By default they now point at the same host directory:
+
+```text
+$HOME/.local/share/pi-web-docker/data
+```
+
+Pi session files are therefore shared at:
+
+```text
+$HOME/.local/share/pi-web-docker/data/pi-agent/sessions/
+```
+
+Set `PI_WEB_DOCKER_DATA_DIR=/some/path` for both modes if you want that shared data somewhere else.
+
+Use this shared directory to switch between runtime and dev mode, not to run both at the same time. Stop one Compose stack before starting the other so two session daemons do not share the same socket/state directory concurrently.
+
+For sessions to appear under the same workspace in both modes, use the same project path in PI WEB. On Flatcar, prefer host-mounted paths such as `/home/core/<repo>`, `/srv/<project>`, or `/opt/<project>`. The dev container also exposes this checkout as `/workspace` so the PI WEB dev server can run from it, but sessions started against `/workspace` are organized under that different working-directory path and will not line up with runtime sessions for `/home/core/<repo>`.
 
 When `package-lock.json` changes, rebuild the dev image and recreate the `node_modules` volume so the bind-mounted checkout sees the new dependency tree:
 

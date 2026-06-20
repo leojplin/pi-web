@@ -255,7 +255,7 @@ export DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
 docker compose -f docker/compose.dev.yml up --build
 ```
 
-Open <http://127.0.0.1:8505>. The Docker dev setup keeps `sessiond` separate from the autoreloading web/API/client service. See the [Docker guide](https://github.com/jmfederico/pi-web/blob/main/docker/README.md#development-docker-setup).
+Open <http://127.0.0.1:8505>. The Docker dev setup keeps `sessiond` separate from the autoreloading web/API/client service and uses the runtime Docker data directory by default so sessions can be shared across modes. See the [Docker guide](https://github.com/jmfederico/pi-web/blob/main/docker/README.md#development-docker-setup).
 
 ## Production-style run from a checkout
 
