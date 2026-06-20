@@ -1,0 +1,9 @@
+.git
+node_modules
+dist
+.pi-web
+.playwright-cli
+dev-plugins
+*.log
+.env
+.DS_Store

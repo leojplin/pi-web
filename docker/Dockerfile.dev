@@ -1,0 +1,52 @@
+# syntax=docker/dockerfile:1.7
+
+ARG NODE_VERSION=22-bookworm-slim
+ARG DOCKER_CLI_VERSION=29-cli
+
+FROM docker:${DOCKER_CLI_VERSION} AS docker-cli
+
+FROM node:${NODE_VERSION} AS dev
+
+ENV NODE_ENV=development \
+  NPM_CONFIG_UPDATE_NOTIFIER=false \
+  NPM_CONFIG_CACHE=/data/npm-cache \
+  HOME=/data/home \
+  XDG_CONFIG_HOME=/data/config \
+  PI_WEB_DATA_DIR=/data/pi-web \
+  PI_WEB_SESSIOND_SOCKET=/data/pi-web/sessiond.sock \
+  PI_CODING_AGENT_DIR=/data/pi-agent \
+  HOSTEXEC_IMAGE=alpine:3.22 \
+  SHELL=/bin/bash \
+  TERM=xterm-256color
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
+    curl \
+    g++ \
+    git \
+    make \
+    openssh-client \
+    procps \
+    python3 \
+    tini \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+COPY package.json package-lock.json ./
+COPY scripts/install-git-hooks.mjs scripts/install-git-hooks.mjs
+RUN npm ci \
+  && npm cache clean --force \
+  && mkdir -p /data/home /data/config /data/npm-cache /data/pi-web /data/pi-agent \
+  && chmod -R a+rwX /workspace/node_modules /data \
+  && chmod 0777 /workspace
+
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY --chmod=0755 docker/bin/hostexec /usr/local/bin/hostexec
+
+EXPOSE 8504 8505
+
+ENTRYPOINT ["tini", "--"]
+CMD ["npm", "run", "dev"]
