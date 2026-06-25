@@ -7,25 +7,19 @@ import { LitElement, html, type PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { api, type FileSuggestion, type PromptAttachment, type SessionStatus, type SlashCommand } from "../api";
 import type { PromptAttachmentDelivery } from "../../../shared/apiTypes";
-import { captureImageAttachments } from "../promptAttachmentCapture";
+import { capturePromptAttachments, effectivePromptAttachmentDelivery, isInlinePromptAttachment, promptAttachmentsCanUseInlineDelivery, type CapturedAttachment } from "../promptAttachmentCapture";
 import { inputModeForDraft } from "../inputModes";
 import { machineSessionKey } from "../machineKeys";
 import { detectPromptCompletionTrigger, fileCompletionInsertText, type PromptCompletionTrigger } from "../promptCompletions";
 import { clearDraft, loadDraft, saveDraft } from "../promptDraftStorage";
 import { loadAttachmentDelivery, saveAttachmentDelivery } from "../attachmentPreferences";
+import { createMobilePromptEnterMedia, readPromptEnterPreference, shouldSendPromptOnEnterShortcut, shouldUsePromptEnterShiftShortcut } from "../promptEnterBehavior";
 import { promptEditorStyles, type CompletionItem } from "./shared";
 import { renderAttachIcon, renderSendIcon, renderQueueIcon, renderSteerIcon, renderStopIcon, renderThinkingGauge } from "./promptEditorIcons";
 import { thinkingGauge, thinkingLevelLabel } from "../../../shared/thinkingLevels";
 import "./AutocompleteMenu";
 
-interface PendingAttachment {
-  id: string;
-  name: string;
-  mimeType: string;
-  /** Base64 payload without the data: URL prefix. */
-  data: string;
-  size: number;
-}
+type PendingAttachment = CapturedAttachment & { id: string };
 
 @customElement("prompt-editor")
 export class PromptEditor extends LitElement {
@@ -59,6 +53,8 @@ export class PromptEditor extends LitElement {
   private editor: EditorView | undefined;
   private readonly editableCompartment = new Compartment();
   private readonly readOnlyCompartment = new Compartment();
+  private readonly mobilePromptEnterMedia = createMobilePromptEnterMedia();
+  private explicitShiftKeyActive = false;
 
   protected override willUpdate(changed: PropertyValues<this>) {
     if (!changed.has("sessionId") && !changed.has("machineId")) return;
@@ -96,8 +92,8 @@ export class PromptEditor extends LitElement {
       <footer class=${shellMode ? "shell-mode" : ""} @paste=${(event: ClipboardEvent) => { void this.handlePaste(event); }} @dragover=${(event: DragEvent) => { this.handleDragOver(event); }} @drop=${(event: DragEvent) => { void this.handleDrop(event); }}>
         <div class="editor-wrap">
           <div class=${`markdown-editor${this.disabled ? " markdown-editor-disabled" : ""}`} aria-label="Message pi" aria-disabled=${this.disabled ? "true" : "false"}></div>
-          <input class="attachment-input" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden @change=${(event: Event) => { void this.handleFileInput(event); }} />
-          <button class="editor-attach icon-button" ?disabled=${busy} title="Attach images" aria-label="Attach images" @click=${() => { this.attachmentInput?.click(); }}>${renderAttachIcon()}</button>
+          <input class="attachment-input" type="file" multiple hidden @change=${(event: Event) => { void this.handleFileInput(event); }} />
+          <button class="editor-attach icon-button" ?disabled=${busy} title="Attach files" aria-label="Attach files" @click=${() => { this.attachmentInput?.click(); }}>${renderAttachIcon()}</button>
           ${shellMode ? html`<div class="mode-hint">Shell command${inputMode.excludeFromContext ? " · excluded from context" : ""}</div>` : null}
           ${this.isCompacting && !shellMode ? html`<div class="mode-hint">Compacting history · message will be queued</div>` : null}
           ${this.renderAttachments()}
@@ -117,6 +113,11 @@ export class PromptEditor extends LitElement {
     this.editor?.focus();
   }
 
+  /** Get the underlying CM6 EditorView, or undefined if not yet mounted. */
+  get view(): EditorView | undefined {
+    return this.editor;
+  }
+
   private renderCompactStatus() {
     const status = this.status;
     if (status === undefined) return null;
@@ -132,18 +133,20 @@ export class PromptEditor extends LitElement {
 
   private renderAttachments() {
     if (this.attachments.length === 0 && this.attachmentError === undefined) return null;
+    const canUseInlineDelivery = promptAttachmentsCanUseInlineDelivery(this.attachments);
+    const delivery = this.effectiveAttachmentDelivery();
     return html`
       <div class="attachments" aria-label="Pending attachments">
         ${this.attachments.map((attachment) => html`
-          <div class="attachment-chip" title=${attachment.name}>
-            <img src=${`data:${attachment.mimeType};base64,${attachment.data}`} alt=${attachment.name} />
+          <div class=${`attachment-chip ${isInlinePromptAttachment(attachment) ? "attachment-chip-image" : "attachment-chip-file"}`} title=${attachment.name}>
+            ${this.renderAttachmentPreview(attachment)}
             <button type="button" class="attachment-remove" title="Remove attachment" aria-label=${`Remove ${attachment.name}`} @click=${() => { this.removeAttachment(attachment.id); }}>×</button>
           </div>
         `)}
         ${this.attachments.length > 0 ? html`
-          <label class="attachment-delivery" title="How attachments are delivered to the agent">
-            <select .value=${this.attachmentDelivery} @change=${(event: Event) => { this.changeDelivery(event); }}>
-              <option value="inline">Attach to message</option>
+          <label class="attachment-delivery" title=${canUseInlineDelivery ? "How attachments are delivered to the agent" : "General files are saved and mentioned from the workspace"}>
+            <select .value=${delivery} @change=${(event: Event) => { this.changeDelivery(event); }}>
+              <option value="inline" ?disabled=${!canUseInlineDelivery}>Attach to message${canUseInlineDelivery ? "" : " (images only)"}</option>
               <option value="folder">Save to .pi-web/attachments</option>
             </select>
           </label>
@@ -153,9 +156,24 @@ export class PromptEditor extends LitElement {
     `;
   }
 
+  private renderAttachmentPreview(attachment: PendingAttachment) {
+    if (isInlinePromptAttachment(attachment)) {
+      return html`<img src=${`data:${attachment.mimeType};base64,${attachment.data}`} alt=${attachment.name} />`;
+    }
+    return html`
+      <div class="attachment-file-preview" aria-hidden="true">${fileExtensionLabel(attachment.name)}</div>
+      <span class="attachment-file-name">${attachment.name}</span>
+    `;
+  }
+
   private changeDelivery(event: Event) {
     if (!(event.target instanceof HTMLSelectElement)) return;
-    this.attachmentDelivery = event.target.value === "folder" ? "folder" : "inline";
+    const requested = event.target.value === "folder" ? "folder" : "inline";
+    if (requested === "inline" && !promptAttachmentsCanUseInlineDelivery(this.attachments)) {
+      event.target.value = "folder";
+      return;
+    }
+    this.attachmentDelivery = requested;
     saveAttachmentDelivery(this.attachmentDelivery);
   }
 
@@ -164,7 +182,7 @@ export class PromptEditor extends LitElement {
   }
 
   private async handlePaste(event: ClipboardEvent) {
-    const files = imageFilesFromDataTransfer(event.clipboardData);
+    const files = filesFromDataTransfer(event.clipboardData);
     if (files.length === 0) return;
     event.preventDefault();
     await this.addAttachmentFiles(files);
@@ -172,13 +190,11 @@ export class PromptEditor extends LitElement {
 
   private handleDragOver(event: DragEvent) {
     if (event.dataTransfer === null) return;
-    if (Array.from(event.dataTransfer.items).some((item) => item.kind === "file" && item.type.startsWith("image/"))) {
-      event.preventDefault();
-    }
+    if (dataTransferHasFiles(event.dataTransfer)) event.preventDefault();
   }
 
   private async handleDrop(event: DragEvent) {
-    const files = imageFilesFromDataTransfer(event.dataTransfer);
+    const files = filesFromDataTransfer(event.dataTransfer);
     if (files.length === 0) return;
     event.preventDefault();
     await this.addAttachmentFiles(files);
@@ -193,7 +209,7 @@ export class PromptEditor extends LitElement {
 
   private async addAttachmentFiles(files: File[]) {
     this.attachmentError = undefined;
-    const { attachments, error } = await captureImageAttachments(files, readFileAsBase64);
+    const { attachments, error } = await capturePromptAttachments(files, readFileAsBase64);
     if (attachments.length > 0) {
       this.attachments = [...this.attachments, ...attachments.map((attachment) => ({ id: `attachment-${String(++this.attachmentSeq)}`, ...attachment }))];
     }
@@ -201,12 +217,11 @@ export class PromptEditor extends LitElement {
   }
 
   private currentAttachments(): PromptAttachment[] {
-    return this.attachments.map((attachment) => ({
-      kind: "image",
-      mimeType: attachment.mimeType,
-      data: attachment.data,
-      name: attachment.name,
-    }));
+    return this.attachments.map((attachment) => pendingToPromptAttachment(attachment));
+  }
+
+  private effectiveAttachmentDelivery(): PromptAttachmentDelivery {
+    return effectivePromptAttachmentDelivery(this.attachmentDelivery, this.attachments);
   }
 
   private createEditor() {
@@ -223,6 +238,10 @@ export class PromptEditor extends LitElement {
           syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
           EditorView.lineWrapping,
           EditorView.contentAttributes.of((view) => inputAssistanceContentAttributes(view.state.sliceDoc(0, view.state.selection.main.head))),
+          EditorView.domEventHandlers({
+            keyup: (event) => this.handleEditorKeyUp(event),
+            blur: () => this.resetEditorModifierState(),
+          }),
           placeholder("Message pi... Use / for commands, @ for tracked files, @ space for all files"),
           this.editableCompartment.of(EditorView.editable.of(!this.disabled)),
           this.readOnlyCompartment.of(EditorState.readOnly.of(this.disabled)),
@@ -230,11 +249,10 @@ export class PromptEditor extends LitElement {
             if (update.docChanged) this.updateDraft(update.state.doc.toString());
           }),
           keymap.of([
+            { any: (view, event) => this.handleEditorKeyDown(event, view) },
             { key: "ArrowDown", run: () => this.moveCompletion(1) },
             { key: "ArrowUp", run: () => this.moveCompletion(-1) },
             { key: "Escape", run: () => this.closeCompletions() },
-            { key: "Enter", run: () => this.handleEditorEnter() },
-            { key: "Shift-Enter", run: (view) => insertNewlineContinueMarkup(view) || insertNewlineAndIndent(view) },
             { key: "Tab", run: (view) => this.handleEditorTab(view) },
             { key: "Shift-Tab", run: (view) => indentWithTab.shift?.(view) ?? false },
             { key: "Backspace", run: (view) => deleteMarkupBackward(view) },
@@ -330,11 +348,40 @@ export class PromptEditor extends LitElement {
     return true;
   }
 
-  private handleEditorEnter(): boolean {
-    if (this.completions.length) {
+  private handleEditorKeyDown(event: KeyboardEvent, view: EditorView): boolean {
+    if (event.key === "Shift") {
+      this.explicitShiftKeyActive = true;
+      return false;
+    }
+    if (event.key !== "Enter") {
+      this.explicitShiftKeyActive = false;
+      return false;
+    }
+    if (event.defaultPrevented || event.isComposing || view.composing) return false;
+
+    const shiftKey = shouldUsePromptEnterShiftShortcut(event.shiftKey, this.explicitShiftKeyActive, this.mobilePromptEnterMedia);
+    this.explicitShiftKeyActive = false;
+    return this.handleEditorEnter(view, shiftKey);
+  }
+
+  private handleEditorKeyUp(event: KeyboardEvent): boolean {
+    if (event.key === "Shift") this.explicitShiftKeyActive = false;
+    return false;
+  }
+
+  private resetEditorModifierState(): boolean {
+    this.explicitShiftKeyActive = false;
+    return false;
+  }
+
+  private handleEditorEnter(view: EditorView, shiftKey: boolean): boolean {
+    if (!shiftKey && this.completions.length) {
       const completion = this.completions[this.selectedIndex];
       if (completion !== undefined) this.pick(completion);
       return true;
+    }
+    if (!shouldSendPromptOnEnterShortcut(shiftKey, this.mobilePromptEnterMedia, readPromptEnterPreference())) {
+      return insertNewlineContinueMarkup(view) || insertNewlineAndIndent(view);
     }
     this.send(this.canSteer || this.isCompacting ? "followUp" : undefined);
     return true;
@@ -375,7 +422,7 @@ export class PromptEditor extends LitElement {
     if (text === "" && pending.length === 0) return;
     const behavior = this.canSteer || this.isCompacting ? streamingBehavior : undefined;
     const attachments = pending.length > 0 ? this.currentAttachments() : undefined;
-    const delivery = this.attachmentDelivery;
+    const delivery = this.effectiveAttachmentDelivery();
     this.resetComposer();
     // Sending is owned by the controller (it drives the chat activity dock and,
     // for folder mode, orchestrates the upload + reference rewrite), so this is
@@ -409,9 +456,29 @@ function emptyFileSuggestions(): FileSuggestion[] {
   return [];
 }
 
-function imageFilesFromDataTransfer(data: DataTransfer | null): File[] {
+function filesFromDataTransfer(data: DataTransfer | null): File[] {
   if (data === null) return [];
-  return Array.from(data.files).filter((file) => file.type.startsWith("image/"));
+  return Array.from(data.files);
+}
+
+function dataTransferHasFiles(data: DataTransfer): boolean {
+  const items = Array.from(data.items);
+  if (items.length > 0) return items.some((item) => item.kind === "file");
+  return Array.from(data.types).includes("Files");
+}
+
+function pendingToPromptAttachment(attachment: PendingAttachment): PromptAttachment {
+  if (attachment.kind === "image") {
+    return { kind: "image", mimeType: attachment.mimeType, data: attachment.data, name: attachment.name };
+  }
+  return { kind: "file", mimeType: attachment.mimeType, data: attachment.data, name: attachment.name };
+}
+
+function fileExtensionLabel(name: string): string {
+  const trimmed = name.trim();
+  const dotIndex = trimmed.lastIndexOf(".");
+  if (dotIndex >= 0 && dotIndex < trimmed.length - 1) return trimmed.slice(dotIndex + 1, dotIndex + 5).toUpperCase();
+  return "FILE";
 }
 
 function readFileAsBase64(file: File): Promise<string> {

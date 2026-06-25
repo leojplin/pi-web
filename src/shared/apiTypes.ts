@@ -56,6 +56,10 @@ export interface PiWebPathAccessConfig {
   allowedPaths?: string[];
 }
 
+export interface PiWebUploadsConfig {
+  defaultFolder?: string;
+}
+
 export interface PiWebConfigValues {
   host?: string;
   port?: number;
@@ -64,6 +68,8 @@ export interface PiWebConfigValues {
   plugins?: PiWebPluginConfigMap;
   /** External filesystem roots PI WEB may expose outside a workspace. */
   pathAccess?: PiWebPathAccessConfig;
+  /** Workspace-relative defaults for manual file uploads. */
+  uploads?: PiWebUploadsConfig;
   /** Maximum accepted HTTP request body size in bytes (uploads/attachments). */
   maxUploadBytes?: number;
   /** When true, LLMs can start new sessions via the spawn_session tool. */
@@ -115,6 +121,10 @@ export interface Project {
   createdAt: string;
 }
 
+export interface WorkspaceEffectiveConfig {
+  uploads?: PiWebUploadsConfig;
+}
+
 export interface Workspace {
   id: string;
   projectId: string;
@@ -124,6 +134,8 @@ export interface Workspace {
   isMain: boolean;
   isGitRepo: boolean;
   isGitWorktree: boolean;
+  /** Workspace-effective project/global settings needed by workspace UI features. */
+  effectiveConfig?: WorkspaceEffectiveConfig;
 }
 
 export interface SessionRef {
@@ -164,20 +176,32 @@ export interface QueuedSessionMessage {
 }
 
 /**
- * A binary attachment carried with a prompt. The wire format mirrors pi's own
- * `ImageContent` shape (`{ type: "image", data, mimeType }`) so attachments are
- * fully compatible with the underlying pi coding agent.
+ * A pi-native image attachment carried with a prompt. The wire format mirrors
+ * pi's own `ImageContent` shape (`{ type: "image", data, mimeType }`) so these
+ * attachments are compatible with native multimodal delivery after validation.
  */
-export interface PromptAttachment {
-  /** Kind of attachment. Only images are supported by pi today. */
+export interface PromptImageAttachment {
   kind: "image";
-  /** IANA mime type (for example "image/png"). */
+  /** Supported image MIME type (image/png, image/jpeg, image/gif, or image/webp). */
   mimeType: string;
   /** Base64-encoded binary payload (no data: URL prefix). */
   data: string;
   /** Optional original filename, used for previews and folder-mode filenames. */
   name?: string;
 }
+
+/** A general file attachment that must be saved into the workspace before use. */
+export interface PromptFileAttachment {
+  kind: "file";
+  /** Non-empty IANA MIME type (for example "application/pdf"). */
+  mimeType: string;
+  /** Base64-encoded binary payload (no data: URL prefix). Empty for zero-byte files. */
+  data: string;
+  /** Optional original filename, used for previews and folder-mode filenames. */
+  name?: string;
+}
+
+export type PromptAttachment = PromptImageAttachment | PromptFileAttachment;
 
 /**
  * How prompt attachments should be delivered to the session.
@@ -313,6 +337,35 @@ export interface FileContentResponse {
   content: string;
   truncated: boolean;
   binary: boolean;
+}
+
+export interface WriteWorkspaceFileOptions {
+  createDirs?: boolean;     // default: true — mkdir -p equivalent
+  overwrite?: boolean;      // default: true — throw if false and file exists
+}
+
+export interface WriteWorkspaceFileResponse {
+  path: string;
+  size: number;
+  modifiedAt: string;
+  created: boolean;  // true if file was created, false if overwritten
+}
+
+export interface DeleteWorkspaceFileResponse {
+  path: string;
+  existed: boolean;  // true if file existed and was deleted, false if file did not exist
+}
+
+export interface MoveWorkspaceFileOptions {
+  createDirs?: boolean;   // default: true — mkdir -p equivalent for target parent directory
+  overwrite?: boolean;    // default: false — throw if target exists (safer default than writeFile)
+}
+
+export interface MoveWorkspaceFileResponse {
+  fromPath: string;
+  toPath: string;
+  size: number;
+  modifiedAt: string;
 }
 
 export type GitFileState = "unmodified" | "modified" | "added" | "deleted" | "renamed" | "copied" | "untracked" | "ignored" | "conflicted";
