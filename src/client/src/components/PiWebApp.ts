@@ -1,6 +1,6 @@
 import { LitElement, html } from "lit";
 import { customElement, query, state } from "lit/decorators.js";
-import { configApi, effectiveWorkspaceUploadFolder, piWebApi, sessionsApi, terminalsApi, workspacesApi, workspaceEffectiveUploadFolder, type Machine, type MachineHealth, type PiWebConfigValues, type PiWebShortcutConfig, type Project, type RealtimeEvent, type SessionCleanupExecuteResponse, type SessionCleanupPreviewResponse, type SessionCleanupRequest, type SessionInfo, type TerminalCommandRun, type TerminalUiEvent, type Workspace } from "../api";
+import { api, configApi, effectiveWorkspaceUploadFolder, piWebApi, sessionsApi, terminalsApi, workspacesApi, workspaceEffectiveUploadFolder, type Machine, type MachineHealth, type PiWebConfigValues, type PiWebShortcutConfig, type Project, type RealtimeEvent, type SessionCleanupExecuteResponse, type SessionCleanupPreviewResponse, type SessionCleanupRequest, type SessionInfo, type TerminalCommandRun, type TerminalUiEvent, type Workspace } from "../api";
 import type { AppAction } from "../actions";
 import { initialAppState, type AppState } from "../appState";
 import { isSessionActive } from "../../../shared/activity";
@@ -41,6 +41,7 @@ import "./MachineList";
 import "./ProjectList";
 import "./WorkspaceList";
 import "./SessionList";
+import "./FlatSessionList";
 import "./SessionCleanupDialog";
 import "./ChatView";
 import type { ChatView } from "./ChatView";
@@ -92,6 +93,8 @@ interface SessionCleanupDialogState {
 export class PiWebApp extends LitElement {
   @state() private state: AppState = initialAppState();
   @query("chat-view") private chatView?: ChatView;
+  @state() private allSessions: SessionInfo[] = [];
+  @state() private flatSessionView = false;
   @query("prompt-editor") private promptEditor?: PromptEditor;
   @query("app-navigation-panel") private navigationPanel?: AppNavigationPanel;
   @query("#navigation-panel") private navigationPanelFrame?: HTMLElement;
@@ -367,7 +370,7 @@ export class PiWebApp extends LitElement {
 
   private async refreshCurrentWorkspaceSurface(): Promise<void> {
     const workspace = this.state.selectedWorkspace;
-    const tool = this.state.mainView !== "chat" && this.state.mainView !== "navigation" ? this.state.mainView : this.state.workspaceTool;
+    const tool = this.state.mainView !== "chat" && this.state.mainView !== "navigation" && this.state.mainView !== "sessions" ? this.state.mainView : this.state.workspaceTool;
     if (tool === "core:workspace.files") await this.files.refreshFiles();
     else if (tool === "core:workspace.git") await this.git.refreshGit();
     else if (tool === "core:workspace.terminal" && workspace !== undefined) await this.refreshActiveTerminals(workspace);
@@ -740,13 +743,91 @@ export class PiWebApp extends LitElement {
   }
 
   private selectMainView(view: AppState["mainView"]) {
-    if (view !== "navigation" && view !== "chat") {
+    if (view !== "navigation" && view !== "chat" && view !== "sessions") {
       this.openWorkspaceTool(view);
       return;
     }
+    if (view === "sessions") void this.loadAllSessions();
     this.setState({ mainView: view });
     this.updateUrl();
     this.git.updatePolling();
+  }
+
+  private async loadAllSessions(): Promise<void> {
+    try {
+      const machineId = selectedMachineId(this.state);
+      this.allSessions = await sessionsApi.allSessions(machineId);
+    } catch (error) {
+      console.error("Failed to load all sessions:", error);
+    }
+  }
+
+  private async selectSessionFromFlatList(session: SessionInfo): Promise<void> {
+    const state = this.state;
+    const machineId = selectedMachineId(state);
+
+    // Collect all known workspaces across all projects
+    const allWorkspaces: Workspace[] = Object.values(state.workspacesByProjectId).flat();
+    const workspace = allWorkspaces.find((w) => w.path === session.cwd);
+
+    if (workspace !== undefined) {
+      // Found the workspace — select its project first, then the workspace with the target session
+      const project = state.projects.find((p) => p.id === workspace.projectId);
+      if (project !== undefined && project.id !== state.selectedProject?.id) {
+        await this.workspaces.selectProject(project, {
+          workspaceId: workspace.id,
+          sessionId: session.id,
+        });
+      } else if (this.state.selectedWorkspace?.id !== workspace.id) {
+        await this.workspaces.selectWorkspace(workspace, { sessionId: session.id });
+      } else if (this.state.selectedSession?.id !== session.id) {
+        await this.sessions.selectSession(session);
+      }
+    } else {
+      // Find the project whose path most closely contains session.cwd (longest prefix match)
+      const matchingProjects = state.projects
+        .filter((p) => session.cwd.startsWith(p.path + "/") || session.cwd === p.path)
+        .sort((a, b) => b.path.length - a.path.length);
+      const project = matchingProjects[0];
+
+      if (project !== undefined) {
+        // Load workspaces for this project to find the matching workspace ID
+        const workspaces = await workspacesApi.workspaces(project.id, machineId);
+        const matchingWorkspace = workspaces.find((w) => w.path === session.cwd);
+        if (matchingWorkspace !== undefined) {
+          await this.workspaces.selectProject(project, {
+            workspaceId: matchingWorkspace.id,
+            sessionId: session.id,
+          });
+        } else {
+          await this.workspaces.selectProject(project, { sessionId: session.id });
+          if (this.state.selectedSession?.id !== session.id) {
+            await this.sessions.selectSession(session);
+          }
+        }
+      } else {
+        // No project found — auto-add one, then select with the correct workspace and session.
+        const newProject = await api.addProject(session.cwd, undefined, false, machineId);
+        this.setState({
+          projects: [...state.projects.filter((p) => p.id !== newProject.id), newProject],
+        });
+        // Load workspaces to find the matching workspace ID
+        const workspaces = await workspacesApi.workspaces(newProject.id, machineId);
+        const matchingWorkspace = workspaces.find((w) => w.path === session.cwd);
+        if (matchingWorkspace !== undefined) {
+          await this.workspaces.selectProject(newProject, {
+            workspaceId: matchingWorkspace.id,
+            sessionId: session.id,
+          });
+        } else {
+          await this.workspaces.selectProject(newProject, { sessionId: session.id });
+          if (this.state.selectedSession?.id !== session.id) {
+            await this.sessions.selectSession(session);
+          }
+        }
+      }
+    }
+    this.selectMainView("chat");
   }
 
   private openSettings(section: SettingsSection = "general"): void {
@@ -1155,6 +1236,11 @@ export class PiWebApp extends LitElement {
         .onCleanupSessions=${() => { this.openSessionCleanupDialog(); }}
         .onFocusNavigationTarget=${(target: NavigationFocusTarget) => { void this.focusNavigationTarget(target); }}
         .onCancelKeyboardNavigation=${() => { void this.focusChatComposer(); }}
+        .allSessions=${this.allSessions}
+        .flatSessionView=${this.flatSessionView}
+        .onToggleFlatSessionView=${() => { this.flatSessionView = !this.flatSessionView; if (this.flatSessionView && this.allSessions.length === 0) void this.loadAllSessions(); }}
+        .selectedFlatSessionId=${this.state.selectedSession?.id}
+        .onSelectFlatSession=${(session: SessionInfo) => { void this.selectNavigationItem("sessions", "chat", () => this.selectSessionFromFlatList(session)); }}
       ></app-navigation-panel>
     `;
   }
@@ -1859,6 +1945,7 @@ export class PiWebApp extends LitElement {
   private mobileMainTabs(): AppMobileMainTab[] {
     return [
       { id: "navigation", label: "Sessions", icon: "navigation", className: "navigation-tab" },
+      { id: "sessions", label: "All", icon: "sessions" },
       { id: "chat", label: "Chat", icon: "chat" },
       ...this.visibleWorkspacePanels().map((panel): AppMobileMainTab => {
         const icon = panel.icon ?? this.mobilePanelIcon(panel);
@@ -1887,6 +1974,21 @@ export class PiWebApp extends LitElement {
           ${this.renderMobileMainTabs()}
           ${state.error ? html`<div class="error">${state.error}</div>` : null}
           <div class="mobile-navigation-panel">${this.appShell.isMobileNavigationLayout ? this.renderNavigationPanel() : null}</div>
+          ${state.mainView === "sessions" ? html`
+            <flat-session-list
+              .sessions=${this.allSessions}
+              .selectedSessionId=${state.selectedSession?.id}
+              .statuses=${state.sessionStatuses}
+              .activities=${state.sessionActivities}
+              .sending=${state.sendingPrompts}
+              .onSelect=${(session: SessionInfo) => { void this.selectSessionFromFlatList(session).catch((e: unknown) => { console.error("[flat-session] unhandled error:", e); }); }}
+              .onArchive=${(session: SessionInfo) => this.sessions.archiveSession(session)}
+              .onArchiveWithDescendants=${(session: SessionInfo) => this.sessions.archiveSessionWithDescendants(session)}
+              .onRestore=${(session: SessionInfo) => { void this.sessions.restoreSession(session); }}
+              .onDeleteArchived=${(session: SessionInfo) => this.sessions.deleteArchivedSessions([session])}
+              .onDetachParent=${(session: SessionInfo) => this.sessions.detachParent(session)}
+            ></flat-session-list>
+          ` : null}
           ${state.selectedSession ? html`
             <chat-view .sessionId=${state.selectedSession.id} .messages=${state.messages} .messageStart=${state.messagePageStart} .messageEnd=${state.messagePageEnd} .messageTotal=${state.messagePageTotal} .hasMore=${state.messagePageStart > 0} .loadingMore=${state.isLoadingEarlierMessages} .isReceivingPartialStream=${state.isReceivingPartialStream} .isSendingPrompt=${state.sendingPrompts[state.selectedSession.id] === true} .isCompacting=${state.status?.isCompacting === true} .pendingMessageCount=${state.status?.pendingMessageCount ?? 0} .status=${state.status} .activity=${state.activity} .onLoadMore=${() => this.withChatPrependTransition(() => this.sessions.loadEarlierMessages())}></chat-view>
             <prompt-editor .sessionId=${state.selectedSession.id} .cwd=${state.selectedWorkspace?.path} .machineId=${selectedMachineId(state)} .projectId=${state.selectedWorkspace?.projectId} .workspaceId=${state.selectedWorkspace?.id} .workspaceScopedFileSuggestions=${this.supportsWorkspaceFileSuggestions()} .disabled=${state.selectedSession.archived === true} .canSteer=${state.status?.isStreaming === true} .isCompacting=${state.status?.isCompacting === true} .canStop=${state.status?.isStreaming === true || state.status?.isBashRunning === true || state.status?.isCompacting === true || (state.status?.pendingMessageCount ?? 0) > 0} .status=${state.status} .availableThinkingLevels=${state.availableThinkingLevels} .sending=${state.sendingPrompts[state.selectedSession.id] === true} .onSend=${(text: string, streamingBehavior?: "steer" | "followUp", attachments?: import("../api").PromptAttachment[], delivery?: import("../../../shared/apiTypes").PromptAttachmentDelivery) => { this.sendPrompt(text, streamingBehavior, attachments, delivery); }} .onStop=${() => this.sessions.stopActiveWork()} .onSelectModel=${() => { void this.openModelDialog(); }} .onSelectThinking=${() => { void this.openThinkingDialog(); }}></prompt-editor>

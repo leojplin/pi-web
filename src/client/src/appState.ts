@@ -44,7 +44,7 @@ export interface AppState {
   projectDialogOpen: boolean;
   machineDialogOpen: boolean;
   workspaceTool: QualifiedContributionId;
-  mainView: "navigation" | "chat" | QualifiedContributionId;
+  mainView: "navigation" | "chat" | "sessions" | QualifiedContributionId;
   fileTree: FileTreeEntry[];
   expandedDirs: Record<string, FileTreeEntry[]>;
   selectedFilePath: string | undefined;

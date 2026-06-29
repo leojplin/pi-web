@@ -154,6 +154,7 @@ export interface SessionInfo extends SessionRef {
   parentSessionPath?: string;
   archived?: boolean;
   archivedAt?: string;
+  active?: boolean;
 }
 
 export interface ArchiveSessionsResponse {

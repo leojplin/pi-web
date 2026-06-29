@@ -10,6 +10,7 @@ import "../MachineSwitcher";
 import "../ProjectList";
 import "../WorkspaceList";
 import "../SessionList";
+import "../FlatSessionList";
 
 export type NavigationFocusTarget = NavigationSection | "chat";
 
@@ -71,6 +72,11 @@ export class AppNavigationPanel extends LitElement {
   @property({ attribute: false }) onRemoveMachine?: (machine: Machine) => void | Promise<void>;
   @property({ attribute: false }) onFocusNavigationTarget?: (target: NavigationFocusTarget) => void | Promise<void>;
   @property({ attribute: false }) onCancelKeyboardNavigation?: () => void | Promise<void>;
+  @property({ type: Boolean }) flatSessionView = false;
+  @property({ attribute: false }) onToggleFlatSessionView?: () => void;
+  @property({ attribute: false }) allSessions: SessionInfo[] = [];
+  @property({ attribute: false }) selectedFlatSessionId?: string;
+  @property({ attribute: false }) onSelectFlatSession?: (session: SessionInfo) => void;
 
   @query("machine-list") private machineList?: KeyboardNavigableSection;
   @query("machine-switcher") private machineSwitcher?: KeyboardNavigableSection;
@@ -106,9 +112,17 @@ export class AppNavigationPanel extends LitElement {
         ` : null}
         <div class="header-actions">
           ${this.refreshControl}
+          <button title="${this.flatSessionView ? "Show nested view" : "Show flat list"}" aria-label="${this.flatSessionView ? "Show nested view" : "Show flat list"}" @click=${() => { this.onToggleFlatSessionView?.(); }}>${this.flatSessionView ? "Nest" : "Flat"}</button>
           <button title="Show Actions" aria-label="Show Actions" @click=${() => { this.onShowActions?.(); }}>Actions</button>
         </div>
       </header>
+      ${this.flatSessionView ? html`
+        <flat-session-list
+          .sessions=${this.allSessions}
+          .selectedSessionId=${this.selectedFlatSessionId}
+          .onSelect=${(session: SessionInfo) => this.onSelectFlatSession?.(session)}
+        ></flat-session-list>
+      ` : html`
       ${this.compact && shouldShowMachinesSection(this.machines) ? html`
         <machine-list
           .machines=${this.machines}
@@ -185,6 +199,7 @@ export class AppNavigationPanel extends LitElement {
         .onFocusNextSection=${() => { this.focusNextFrom("sessions"); }}
         .onCancelKeyboardNavigation=${() => { this.cancelKeyboardNavigation(); }}
       ></session-list>
+      `}
     `;
   }
 

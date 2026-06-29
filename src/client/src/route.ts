@@ -6,7 +6,7 @@ export interface AppRoute {
   workspaceId: string | undefined;
   sessionId: string | undefined;
   tool: QualifiedContributionId | undefined;
-  view: "chat" | QualifiedContributionId | undefined;
+  view: "chat" | "sessions" | QualifiedContributionId | undefined;
 }
 
 export function readRoute(): AppRoute {
@@ -48,7 +48,7 @@ function parseTool(value: string | null): QualifiedContributionId | undefined {
   return isQualifiedId(value) ? value : undefined;
 }
 
-function parseView(value: string | null): "chat" | QualifiedContributionId | undefined {
+function parseView(value: string | null): "chat" | "sessions" | QualifiedContributionId | undefined {
   if (value === "chat") return "chat";
   if (value === "files") return "core:workspace.files";
   if (value === "git") return "core:workspace.git";

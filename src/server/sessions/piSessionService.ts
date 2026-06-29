@@ -446,6 +446,21 @@ export class PiSessionService {
     }));
   }
 
+  async listAll(): Promise<ClientSession[]> {
+    const [sessions, archivedRecords] = await Promise.all([this.sessionManager.listAll?.() ?? [], this.archiveStore.list()]);
+    const sessionsById = new Map(sessions.map((session) => [session.id, session]));
+    const allArchived = await Promise.all(
+      archivedRecords
+        .map((record) => this.ensureArchivedSessionMoved(record, sessionsById.get(record.sessionId))),
+    );
+    const archivedById = new Map(allArchived.map((record) => [record.sessionId, record]));
+    const activeIds = new Set(this.active.keys());
+    const unarchivedSessions = sessions
+      .filter((session) => !archivedById.has(session.id))
+      .map((s) => ({ ...clientSessionFromListEntry(s), active: activeIds.has(s.id) }));
+    return unarchivedSessions;
+  }
+
   async list(cwd: string): Promise<ClientSession[]> {
     const [sessions, archivedRecords] = await Promise.all([this.sessionManager.list(cwd), this.archiveStore.list()]);
     const sessionsById = new Map(sessions.map((session) => [session.id, session]));

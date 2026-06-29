@@ -121,6 +121,9 @@ export const appStyles = css`
     .shell.workspace-view > workspace-panel { grid-column: 3; grid-row: 2; display: flex; border-left: 0; }
     .shell:not(.workspace-view) > workspace-panel { display: none; }
     .workspace-panel-edge { display: none; }
+    main.sessions-view chat-view, main.sessions-view prompt-editor, main.sessions-view status-bar,
+    main.sessions-view .empty { display: none; }
+    main.sessions-view flat-session-list { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
     main.workspace-view chat-view, main.workspace-view prompt-editor, main.workspace-view status-bar,
     main.workspace-view .empty { display: none; }
     main.workspace-view { overflow: hidden; }
